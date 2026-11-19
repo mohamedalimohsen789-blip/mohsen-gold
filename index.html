@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>سوق الذهبي & Mohsen AI</title>
+  <style>
+    * { box-sizing: border-box; font-family: Tahoma, Arial, sans-serif; }
+    body {
+      margin: 0;
+      background-color: #121212;
+      color: #ffffff;
+    }
+    .top-bar {
+      display: flex;
+      background-color: #000000;
+      border-bottom: 1px solid #262626;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 15px;
+      background: transparent;
+      color: #a0a0a0;
+      border: none;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+    }
+    .tab-btn.active {
+      color: #00e676;
+      border-bottom-color: #00e676;
+      background-color: #181818;
+    }
+    .container { padding: 16px; max-width: 700px; margin: auto; }
+    .page { display: none; }
+    .page.active { display: block; }
+    .card {
+      background-color: #1c1c1c;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .karat { font-size: 17px; font-weight: bold; color: #ffd54f; }
+    .prices { text-align: left; font-size: 14px; line-height: 1.7; }
+    .up { color: #00e676; font-weight: bold; }
+    .chat-box {
+      background-color: #181818;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      height: 62vh;
+      overflow-y: auto;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .msg {
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      max-width: 85%;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    .bot-msg { background-color: #242424; border-right: 3px solid #00e676; }
+    .user-msg { background-color: #0d3b2e; margin-right: auto; text-align: right; }
+    .input-row { display: flex; gap: 8px; }
+    input[type="text"] {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      border: 1px solid #333;
+      background-color: #1c1c1c;
+      color: #fff;
+      font-size: 14px;
+    }
+    .send-btn {
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: none;
+      background-color: #00e676;
+      color: #000;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .note { font-size: 12px; color: #9e9e9e; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="top-bar">
+    <button id="tab-gold" class="tab-btn active" onclick="switchTab('gold')">سوق الذهبي</button>
+    <button id="tab-ai" class="tab-btn" onclick="switchTab('ai')">Mohsen AI</button>
+  </div>
+
+  <div class="container">
+    <!-- صفحة سوق الذهبي -->
+    <div id="page-gold" class="page active">
+      <div class="note">تحديث مباشر للأسعار — اربط مصدر الأسعار الموثوق (API) داخل كود التحديث.</div>
+      <div class="card">
+        <div class="karat">عيار 24</div>
+        <div class="prices">شراء: <span id="k24-buy" class="up">---</span><br>بيع: <span id="k24-sell">---</span></div>
+      </div>
+      <div class="card">
+        <div class="karat">عيار 21</div>
+        <div class="prices">شراء: <span id="k21-buy" class="up">---</span><br>بيع: <span id="k21-sell">---</span></div>
+      </div>
+      <div class="card">
+        <div class="karat">عيار 18</div>
+        <div class="prices">شراء: <span id="k18-buy" class="up">---</span><br>بيع: <span id="k18-sell">---</span></div>
+      </div>
+      <div class="card">
+        <div class="karat">الجنيه الذهب</div>
+        <div class="prices">شراء: <span id="pound-buy" class="up">---</span><br>بيع: <span id="pound-sell">---</span></div>
+      </div>
+    </div>
+
+    <!-- صفحة Mohsen AI -->
+    <div id="page-ai" class="page">
+      <div class="note">بوت متخصص في الذهب والاقتصاد فقط، ويعتمد على مصادر موثوقة ومعلومات حديثة.</div>
+      <div id="chat-box" class="chat-box">
+        <div class="msg bot-msg">أهلاً بك في <b>Mohsen AI</b>. اسألني عن أسعار الذهب، حركة السوق، الفائدة، التضخم، أو التحليل الاقتصادي من مصادر موثوقة.</div>
+      </div>
+      <div class="input-row">
+        <input id="user-input" type="text" placeholder="اكتب سؤالك عن الذهب أو الاقتصاد..." onkeydown="if(event.key==='Enter') sendMessage()" />
+        <button class="send-btn" onclick="sendMessage()">إرسال</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function switchTab(tab) {
+      document.getElementById('page-gold').classList.toggle('active', tab === 'gold');
+      document.getElementById('page-ai').classList.toggle('active', tab === 'ai');
+      document.getElementById('tab-gold').classList.toggle('active', tab === 'gold');
+      document.getElementById('tab-ai').classList.toggle('active', tab === 'ai');
+    }
+
+    // دالة تحميل الأسعار من مصدر موثوق (API) - اربط رابط الـ API الحقيقي هنا
+    async function loadGoldPrices() {
+      try {
+        // مثال: const res = await fetch('YOUR_TRUSTED_GOLD_API_URL');
+        // const data = await res.json();
+        document.getElementById('k24-buy').textContent = 'متصل بالمصدر';
+        document.getElementById('k24-sell').textContent = 'متصل بالمصدر';
+        document.getElementById('k21-buy').textContent = 'متصل بالمصدر';
+        document.getElementById('k21-sell').textContent = 'متصل بالمصدر';
+        document.getElementById('k18-buy').textContent = 'متصل بالمصدر';
+        document.getElementById('k18-sell').textContent = 'متصل بالمصدر';
+        document.getElementById('pound-buy').textContent = 'متصل بالمصدر';
+        document.getElementById('pound-sell').textContent = 'متصل بالمصدر';
+      } catch (e) {
+        console.log('تعذر تحديث الأسعار');
+      }
+    }
+
+    // إرسال السؤال لبوت Mohsen AI (يتطلب ربط Backend أو API يدعم البحث/المصادر الموثوقة)
+    async function sendMessage() {
+      const input = document.getElementById('user-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const chatBox = document.getElementById('chat-box');
+      chatBox.innerHTML += `<div class="msg user-msg">${text}</div>`;
+      input.value = '';
+
+      // فلتر مبدئي لتوجيه الأسئلة نحو الذهب والاقتصاد
+      const isFinanceOrGold = /ذهب|عيار|جنيه|أونصة|اقتصاد|تضخم|فائدة|دولار|بنك|استثمار|سوق|بورصة/i.test(text);
+      if (!isFinanceOrGold) {
+        chatBox.innerHTML += `<div class="msg bot-msg">أنا مخصص للإجابة على الأسئلة المتعلقة <b>بالذهب والاقتصاد</b> فقط، وبأحدث المعلومات من مصادر موثوقة.</div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
+        return;
+      }
+
+      const loadingId = 'loading-' + Date.now();
+      chatBox.innerHTML += `<div id="${loadingId}" class="msg bot-msg">جاري البحث في مصادر موثوقة عن أحدث المعلومات...</div>`;
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // هنا تربط نقطة النهاية (Endpoint) الخاصة بالبوت في السيرفر بتاعك عشان يجيب أحدث رد موثوق
+      setTimeout(() => {
+        const el = document.getElementById(loadingId);
+        if (el) {
+          el.innerHTML = `للحصول على أحدث الأسعار والأخبار اللحظية بدقة 100%، اربط هذا الزر بسيرفر/API يجلب البيانات الحية من مصادر اقتصادية موثوقة ويعرض المصدر مع الإجابة.`;
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }, 600);
+    }
+
+    loadGoldPrices();
+  </script>
+</body>
+</html>

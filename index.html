@@ -27,11 +27,11 @@
     }
     .tab-btn {
       flex: 1;
-      padding: 15px;
+      padding: 14px 8px;
       background: transparent;
       color: #a0a0a0;
       border: none;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: bold;
       cursor: pointer;
       border-bottom: 3px solid transparent;
@@ -43,7 +43,7 @@
     }
     .container {
       padding: 14px;
-      max-width: 720px;
+      max-width: 760px;
       margin: auto;
     }
     .page { display: none; }
@@ -74,6 +74,106 @@
     .prices { text-align: left; font-size: 14px; line-height: 1.7; direction: ltr; }
     .up { color: #00e676; font-weight: bold; }
     .down { color: #ff5252; font-weight: bold; }
+
+    .chart-box {
+      background-color: #1a1a1a;
+      border: 1px solid #2c2c2c;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .chart-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .asset-pills, .range-pills, .side-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pill-btn {
+      padding: 7px 11px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      background-color: #242424;
+      color: #ddd;
+      font-size: 12px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .pill-btn.active {
+      background-color: #00e676;
+      color: #000;
+      border-color: #00e676;
+    }
+    .chart-summary {
+      background-color: #141414;
+      border: 1px solid #282828;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+    }
+    .chart-stage {
+      display: flex;
+      align-items: stretch;
+      gap: 8px;
+    }
+    .y-axis {
+      width: 78px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #b0b0b0;
+      text-align: left;
+      direction: ltr;
+      padding: 4px 0;
+      user-select: none;
+    }
+    .canvas-wrap {
+      flex: 1;
+      background-color: #111111;
+      border: 1px solid #262626;
+      border-radius: 10px;
+      overflow: hidden;
+      position: relative;
+    }
+    canvas#gold-map-canvas {
+      display: block;
+      width: 100%;
+      height: 250px;
+      touch-action: none;
+      cursor: ew-resize;
+    }
+    .scrubber-row {
+      margin-top: 12px;
+      background-color: #161616;
+      border: 1px solid #282828;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    .scrubber-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: #cfcfcf;
+      margin-bottom: 8px;
+    }
+    input[type="range"].time-slider {
+      width: 100%;
+      accent-color: #00e676;
+      cursor: pointer;
+    }
 
     #page-ai.active {
       display: flex;
@@ -122,7 +222,7 @@
       max-width: 720px;
       margin: auto;
     }
-    input[type="text"] {
+    input[type="text"].chat-input {
       flex: 1;
       padding: 12px;
       border-radius: 10px;
@@ -140,13 +240,14 @@
       font-weight: bold;
       cursor: pointer;
     }
-    .note { font-size: 12px; color: #9e9e9e; margin-bottom: 12px; }
+    .note { font-size: 12px; color: #9e9e9e; margin-bottom: 12px; line-height: 1.5; }
   </style>
 </head>
 <body>
 
   <div class="top-bar">
     <button id="tab-gold" class="tab-btn active" onclick="switchTab('gold')">سوق الذهبي</button>
+    <button id="tab-map" class="tab-btn" onclick="switchTab('map')">خريطة الذهب</button>
     <button id="tab-ai" class="tab-btn" onclick="switchTab('ai')">Mohsen AI</button>
   </div>
 
@@ -173,6 +274,72 @@
       </div>
     </div>
 
+    <!-- صفحة خريطة الذهب -->
+    <div id="page-map" class="page">
+      <div class="chart-box">
+        <div class="chart-header">
+          <div class="asset-pills">
+            <button id="asset-k21" class="pill-btn active" onclick="setMapAsset('k21')">عيار 21</button>
+            <button id="asset-k24" class="pill-btn" onclick="setMapAsset('k24')">عيار 24</button>
+            <button id="asset-k18" class="pill-btn" onclick="setMapAsset('k18')">عيار 18</button>
+            <button id="asset-pound" class="pill-btn" onclick="setMapAsset('pound')">الجنيه الذهب</button>
+          </div>
+          <div class="side-pills">
+            <button id="side-buy" class="pill-btn active" onclick="setMapSide('buy')">Buy</button>
+            <button id="side-sell" class="pill-btn" onclick="setMapSide('sell')">Sell</button>
+          </div>
+        </div>
+
+        <div class="chart-header">
+          <div class="range-pills">
+            <button id="range-1d" class="pill-btn active" onclick="setMapRange('1d')">يوم</button>
+            <button id="range-1y" class="pill-btn" onclick="setMapRange('1y')">سنة</button>
+            <button id="range-5y" class="pill-btn" onclick="setMapRange('5y')">5 سنوات</button>
+            <button id="range-all" class="pill-btn" onclick="setMapRange('all')">الكل</button>
+          </div>
+          <div id="map-trend-badge" class="up">الاتجاه: ---</div>
+        </div>
+
+        <div class="chart-summary">
+          <div>
+            <span style="color:#aaa;">السعر الحالي الموثوق:</span>
+            <b id="map-current-price" style="color:#ffd54f;">---</b>
+          </div>
+          <div>
+            <span style="color:#aaa;">النقطة المحددة:</span>
+            <b id="map-selected-price" style="color:#00e676;">---</b>
+          </div>
+          <div>
+            <span style="color:#aaa;">الوقت / التاريخ:</span>
+            <b id="map-selected-time">---</b>
+          </div>
+        </div>
+
+        <div class="chart-stage">
+          <div id="map-y-axis" class="y-axis">
+            <span>---</span>
+            <span>---</span>
+            <span>---</span>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="gold-map-canvas"></canvas>
+          </div>
+        </div>
+
+        <div class="scrubber-row">
+          <div class="scrubber-top">
+            <span>اسحب المؤشر أو المس الخريطة يمين/شمال لمعرفة سعر الماضي:</span>
+            <span id="map-delta-label">الفرق: ---</span>
+          </div>
+          <input id="map-scrubber" class="time-slider" type="range" min="0" max="29" value="29" oninput="onScrubberChange(this.value)" />
+        </div>
+      </div>
+
+      <div class="note">
+        الأسعار الحالية هي القيم الموثوقة المعتمدة في التطبيق (ويمكن ربط مصدر خارجي عبر <code>CUSTOM_API_URL</code>). المنحنى الزمني السابق وميزة السحب يعرضان حركة تقديرية توضيحية مبنية على السعر المرجعي الحالي وليسا أرشيف بورصة لحظياً مباشراً.
+      </div>
+    </div>
+
     <!-- صفحة Mohsen AI -->
     <div id="page-ai" class="page">
       <div id="chat-stream" class="chat-stream">
@@ -180,7 +347,7 @@
       </div>
       <div class="input-bar">
         <div class="input-row">
-          <input id="user-input" type="text" placeholder="اكتب رسالتك هنا..." onkeydown="if(event.key==='Enter') sendMessage()" />
+          <input id="user-input" class="chat-input" type="text" placeholder="اكتب رسالتك هنا..." onkeydown="if(event.key==='Enter') sendMessage()" />
           <button class="send-btn" onclick="sendMessage()">إرسال</button>
         </div>
       </div>
@@ -189,7 +356,7 @@
 
   <script>
     const VERIFIED_GOLD_DATA = {
-      sourceLabel: 'Market Feed (30s Auto-Check)',
+      sourceLabel: 'Verified App Feed (30s Auto-Check)',
       k24: { buy: 6525.75, sell: 6582.75 },
       k21: { buy: 5710, sell: 5760 },
       k18: { buy: 4894.25, sell: 4937.25 },
@@ -200,9 +367,16 @@
     const GEMINI_MODEL = 'gemini-2.5-flash';
 
     const CUSTOM_API_URL = '';
-    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v12';
-    const MOVE_STORAGE_KEY = 'gold_last_move_v12';
-    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v12';
+    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v13';
+    const MOVE_STORAGE_KEY = 'gold_last_move_v13';
+    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v13';
+
+    const ASSET_LABELS = {
+      k21: 'عيار 21',
+      k24: 'عيار 24',
+      k18: 'عيار 18',
+      pound: 'الجنيه الذهب'
+    };
 
     const STOP_WORDS = new Set([
       'في', 'من', 'على', 'الى', 'إلى', 'عن', 'مع', 'ده', 'دي', 'دا', 'هو', 'هي',
@@ -216,7 +390,8 @@
       'بورصه', 'بورصة', 'اسهم', 'سهم', 'مؤشر', 'تداول', 'سيوله', 'تضخم', 'فايده',
       'مصنعيه', 'اوقيه', 'اونصه', 'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور',
       'اسمي', 'انسى', 'امسح', 'هتزيد', 'تزيد', 'هتنزل', 'تنزل', 'تقل', 'يقل', 'اخر',
-      'مره', 'مرا', 'رايك', 'رأيك', 'غالي', 'رخيص', 'حلوه', 'مناسب', 'ارتفع', 'نزل'
+      'مره', 'مرا', 'رايك', 'رأيك', 'غالي', 'رخيص', 'حلوه', 'مناسب', 'ارتفع', 'نزل',
+      'خريطه', 'خريطة', 'شارت', 'رسم'
     ];
 
     const GREETING_WORDS = new Set([
@@ -231,9 +406,16 @@
     let isSending = false;
     let memoryStore = loadMemoryStore();
 
+    let mapAsset = 'k21';
+    let mapSide = 'buy';
+    let mapRange = '1d';
+    let mapSeries = [];
+    let selectedMapIndex = 0;
+    let isDraggingMap = false;
+
     function cloneGoldData(data) {
       return {
-        sourceLabel: data.sourceLabel || 'Market Feed',
+        sourceLabel: data.sourceLabel || 'Verified App Feed',
         k24: { buy: Number(data.k24.buy), sell: Number(data.k24.sell) },
         k21: { buy: Number(data.k21.buy), sell: Number(data.k21.sell) },
         k18: { buy: Number(data.k18.buy), sell: Number(data.k18.sell) },
@@ -384,10 +566,17 @@
 
     function switchTab(tab) {
       document.getElementById('page-gold').classList.toggle('active', tab === 'gold');
+      document.getElementById('page-map').classList.toggle('active', tab === 'map');
       document.getElementById('page-ai').classList.toggle('active', tab === 'ai');
+
       document.getElementById('tab-gold').classList.toggle('active', tab === 'gold');
+      document.getElementById('tab-map').classList.toggle('active', tab === 'map');
       document.getElementById('tab-ai').classList.toggle('active', tab === 'ai');
+
       window.scrollTo({ top: 0, behavior: 'instant' });
+      if (tab === 'map') {
+        rebuildMapSeries(false);
+      }
     }
 
     function formatEGP(num) {
@@ -404,6 +593,273 @@
       if (newVal > oldVal) el.classList.add('up');
       else if (newVal < oldVal) el.classList.add('down');
       else if (defaultClass) el.classList.add(defaultClass);
+    }
+
+    function buildIllustrativeSeries(latestPrice, rangeKey, assetKey, sideKey) {
+      const config = {
+        '1d': { points: 24, swingRatio: 0.012, pastDrift: -0.008, unit: 'hours' },
+        '1y': { points: 30, swingRatio: 0.08, pastDrift: -0.18, unit: 'days' },
+        '5y': { points: 30, swingRatio: 0.16, pastDrift: -0.45, unit: 'months' },
+        'all': { points: 30, swingRatio: 0.22, pastDrift: -0.62, unit: 'months' }
+      }[rangeKey] || { points: 30, swingRatio: 0.08, pastDrift: -0.18, unit: 'days' };
+
+      const seedOffset = (assetKey.charCodeAt(0) * 7 + sideKey.charCodeAt(0) * 3) % 11;
+      const now = new Date();
+      const series = [];
+
+      for (let i = 0; i < config.points; i++) {
+        const progress = i / (config.points - 1); // 0 = أقدم نقطة, 1 = الآن
+        const remaining = 1 - progress;
+        const wave = Math.sin((i + seedOffset) * 0.72) * 0.6 + Math.cos((i + seedOffset) * 0.31) * 0.4;
+        const pastFactor = 1 + config.pastDrift * Math.pow(remaining, 1.15) + wave * config.swingRatio * remaining;
+        const price = i === config.points - 1
+          ? Number(latestPrice)
+          : Number((latestPrice * Math.max(0.25, pastFactor)).toFixed(2));
+
+        const labelDate = new Date(now.getTime());
+        if (rangeKey === '1d') {
+          const hoursBack = (config.points - 1 - i);
+          labelDate.setHours(labelDate.getHours() - hoursBack);
+          const timeStr = labelDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+          series.push({ label: i === config.points - 1 ? 'الآن' : timeStr, price });
+        } else if (rangeKey === '1y') {
+          const daysBack = Math.round(((config.points - 1 - i) / (config.points - 1)) * 365);
+          labelDate.setDate(labelDate.getDate() - daysBack);
+          const dateStr = labelDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+          series.push({ label: i === config.points - 1 ? 'الآن' : dateStr, price });
+        } else if (rangeKey === '5y') {
+          const monthsBack = Math.round(((config.points - 1 - i) / (config.points - 1)) * 60);
+          labelDate.setMonth(labelDate.getMonth() - monthsBack);
+          const dateStr = labelDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+          series.push({ label: i === config.points - 1 ? 'الآن' : dateStr, price });
+        } else {
+          const monthsBack = Math.round(((config.points - 1 - i) / (config.points - 1)) * 120);
+          labelDate.setMonth(labelDate.getMonth() - monthsBack);
+          const dateStr = labelDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+          series.push({ label: i === config.points - 1 ? 'الآن' : dateStr, price });
+        }
+      }
+
+      return series;
+    }
+
+    function setMapAsset(asset) {
+      mapAsset = asset;
+      ['k21', 'k24', 'k18', 'pound'].forEach((k) => {
+        document.getElementById(`asset-${k}`).classList.toggle('active', k === asset);
+      });
+      rebuildMapSeries(true);
+    }
+
+    function setMapSide(side) {
+      mapSide = side;
+      document.getElementById('side-buy').classList.toggle('active', side === 'buy');
+      document.getElementById('side-sell').classList.toggle('active', side === 'sell');
+      rebuildMapSeries(true);
+    }
+
+    function setMapRange(range) {
+      mapRange = range;
+      ['1d', '1y', '5y', 'all'].forEach((r) => {
+        document.getElementById(`range-${r}`).classList.toggle('active', r === range);
+      });
+      rebuildMapSeries(true);
+    }
+
+    function rebuildMapSeries(resetToLatest) {
+      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
+      mapSeries = buildIllustrativeSeries(latestPrice, mapRange, mapAsset, mapSide);
+
+      const slider = document.getElementById('map-scrubber');
+      if (slider) {
+        slider.max = String(Math.max(0, mapSeries.length - 1));
+        if (resetToLatest || selectedMapIndex >= mapSeries.length) {
+          selectedMapIndex = mapSeries.length - 1;
+        }
+        slider.value = String(selectedMapIndex);
+      }
+      updateMapUI();
+    }
+
+    function onScrubberChange(val) {
+      const idx = Math.max(0, Math.min(mapSeries.length - 1, Number(val) || 0));
+      selectedMapIndex = idx;
+      updateMapUI();
+    }
+
+    function updateMapUI() {
+      if (!mapSeries.length) return;
+      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
+      const firstPrice = mapSeries[0].price;
+      const overallDiff = latestPrice - firstPrice;
+      const isUp = overallDiff >= 0;
+
+      const trendEl = document.getElementById('map-trend-badge');
+      if (trendEl) {
+        trendEl.classList.remove('up', 'down');
+        trendEl.classList.add(isUp ? 'up' : 'down');
+        const pct = firstPrice > 0 ? ((overallDiff / firstPrice) * 100).toFixed(1) : '0.0';
+        trendEl.textContent = isUp
+          ? `الاتجاه: صاعد (+${formatEGP(Math.abs(overallDiff))} | +${pct}%)`
+          : `الاتجاه: هابط (-${formatEGP(Math.abs(overallDiff))} | ${pct}%)`;
+      }
+
+      const curEl = document.getElementById('map-current-price');
+      if (curEl) {
+        curEl.textContent = `${ASSET_LABELS[mapAsset]} (${mapSide.toUpperCase()}): ${formatEGP(latestPrice)}`;
+      }
+
+      const pt = mapSeries[selectedMapIndex] || mapSeries[mapSeries.length - 1];
+      const selPriceEl = document.getElementById('map-selected-price');
+      const selTimeEl = document.getElementById('map-selected-time');
+      const deltaEl = document.getElementById('map-delta-label');
+
+      if (selPriceEl) selPriceEl.textContent = formatEGP(pt.price);
+      if (selTimeEl) selTimeEl.textContent = pt.label;
+
+      if (deltaEl) {
+        const diffFromSelected = latestPrice - pt.price;
+        const sign = diffFromSelected >= 0 ? '+' : '-';
+        deltaEl.textContent = `الفرق عن الآن: ${sign}${formatEGP(Math.abs(diffFromSelected))}`;
+      }
+
+      const prices = mapSeries.map((p) => p.price);
+      const minP = Math.min(...prices);
+      const maxP = Math.max(...prices);
+      const midP = (minP + maxP) / 2;
+
+      const yAxisEl = document.getElementById('map-y-axis');
+      if (yAxisEl) {
+        yAxisEl.innerHTML =
+          `<span>${Math.round(maxP).toLocaleString('en-US')}</span>` +
+          `<span>${Math.round(midP).toLocaleString('en-US')}</span>` +
+          `<span>${Math.round(minP).toLocaleString('en-US')}</span>`;
+      }
+
+      drawGoldMapCanvas(minP, maxP);
+    }
+
+    function drawGoldMapCanvas(minP, maxP) {
+      const canvas = document.getElementById('gold-map-canvas');
+      if (!canvas || !mapSeries.length) return;
+      const wrap = canvas.parentElement;
+      const width = Math.max(220, wrap.clientWidth || 560);
+      const height = 250;
+      const dpr = window.devicePixelRatio || 1;
+
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      const padX = 14;
+      const padY = 20;
+      const plotW = Math.max(10, width - padX * 2);
+      const plotH = Math.max(10, height - padY * 2);
+      const span = Math.max(1, maxP - minP);
+
+      // خطوط شبكة أفقية خفيفة
+      ctx.strokeStyle = '#222222';
+      ctx.lineWidth = 1;
+      for (let g = 0; g <= 2; g++) {
+        const gy = padY + (plotH * g) / 2;
+        ctx.beginPath();
+        ctx.moveTo(padX, gy);
+        ctx.lineTo(padX + plotW, gy);
+        ctx.stroke();
+      }
+
+      const coords = mapSeries.map((pt, idx) => {
+        const x = padX + (idx / Math.max(1, mapSeries.length - 1)) * plotW;
+        const y = padY + plotH - ((pt.price - minP) / span) * plotH;
+        return { x, y, pt };
+      });
+
+      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
+      const isUp = latestPrice >= mapSeries[0].price;
+      const strokeColor = isUp ? '#00e676' : '#ff5252';
+      const fillColor = isUp ? 'rgba(0, 230, 118, 0.14)' : 'rgba(255, 82, 82, 0.14)';
+
+      // تعبئة أسفل المنحنى
+      ctx.beginPath();
+      ctx.moveTo(coords[0].x, padY + plotH);
+      coords.forEach((c) => ctx.lineTo(c.x, c.y));
+      ctx.lineTo(coords[coords.length - 1].x, padY + plotH);
+      ctx.closePath();
+      ctx.fillStyle = fillColor;
+      ctx.fill();
+
+      // خط المنحنى الرئيسي
+      ctx.beginPath();
+      coords.forEach((c, idx) => {
+        if (idx === 0) ctx.moveTo(c.x, c.y);
+        else ctx.lineTo(c.x, c.y);
+      });
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // خط المؤشر العمودي ونقطة السحب المحددة
+      const sel = coords[selectedMapIndex] || coords[coords.length - 1];
+      ctx.strokeStyle = '#ffd54f';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(sel.x, padY);
+      ctx.lineTo(sel.x, padY + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(sel.x, sel.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffd54f';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#111111';
+      ctx.stroke();
+    }
+
+    function selectIndexFromClientX(clientX) {
+      const canvas = document.getElementById('gold-map-canvas');
+      if (!canvas || !mapSeries.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const padX = 14;
+      const plotW = Math.max(10, rect.width - padX * 2);
+      const relX = Math.max(0, Math.min(plotW, clientX - rect.left - padX));
+      const ratio = relX / plotW;
+      const idx = Math.round(ratio * (mapSeries.length - 1));
+      selectedMapIndex = Math.max(0, Math.min(mapSeries.length - 1, idx));
+      const slider = document.getElementById('map-scrubber');
+      if (slider) slider.value = String(selectedMapIndex);
+      updateMapUI();
+    }
+
+    function bindMapInteractions() {
+      const canvas = document.getElementById('gold-map-canvas');
+      if (!canvas) return;
+
+      canvas.addEventListener('pointerdown', (e) => {
+        isDraggingMap = true;
+        canvas.setPointerCapture(e.pointerId);
+        selectIndexFromClientX(e.clientX);
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        if (!isDraggingMap) return;
+        selectIndexFromClientX(e.clientX);
+      });
+
+      canvas.addEventListener('pointerup', (e) => {
+        isDraggingMap = false;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      });
+
+      window.addEventListener('resize', () => {
+        if (document.getElementById('page-map').classList.contains('active')) {
+          updateMapUI();
+        }
+      });
     }
 
     async function loadGoldPrices() {
@@ -463,6 +919,10 @@
       if (noteEl) {
         const checkedAt = new Date().toLocaleTimeString('en-US', { hour12: true });
         noteEl.textContent = `${currentGoldData.sourceLabel} | Checked every 30s | Last check: ${checkedAt}`;
+      }
+
+      if (document.getElementById('page-map').classList.contains('active')) {
+        rebuildMapSeries(false);
       }
     }
 
@@ -855,6 +1315,8 @@
     }
 
     applySavedWelcomeName();
+    bindMapInteractions();
+    rebuildMapSeries(true);
     loadGoldPrices();
     setInterval(loadGoldPrices, 30000);
   </script>

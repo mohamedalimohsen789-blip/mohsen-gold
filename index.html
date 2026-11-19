@@ -137,7 +137,8 @@
       gap: 6px;
     }
     .y-axis {
-      width: 76px;
+      position: relative;
+      width: 78px;
       height: 310px;
       display: flex;
       flex-direction: column;
@@ -153,13 +154,34 @@
       border-radius: 8px;
       user-select: none;
     }
-    .y-axis span {
+    .y-axis span.y-tick {
       display: block;
       border-bottom: 1px dashed #222;
       padding-bottom: 1px;
     }
-    .y-axis span:last-child {
+    .y-axis span.y-tick:last-child {
       border-bottom: none;
+    }
+    .selected-price-tag {
+      position: absolute;
+      left: 1px;
+      right: 1px;
+      transform: translateY(-50%);
+      background-color: #00e676;
+      color: #000000;
+      font-weight: bold;
+      font-size: 11px;
+      font-family: monospace;
+      padding: 2px 4px;
+      border-radius: 5px;
+      text-align: center;
+      z-index: 5;
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.75);
+      pointer-events: none;
+    }
+    .selected-price-tag.down-tag {
+      background-color: #ff5252;
+      color: #ffffff;
     }
     .canvas-wrap {
       flex: 1;
@@ -345,7 +367,7 @@
 
         <div class="chart-stage">
           <div id="map-y-axis" class="y-axis">
-            <span>---</span>
+            <span class="y-tick">---</span>
           </div>
           <div class="canvas-wrap">
             <canvas id="gold-map-canvas"></canvas>
@@ -443,9 +465,9 @@
     let mapAsset = 'k21';
     let mapSide = 'buy';
     let mapTimeframe = '1m';
-    let candles = []; // مرتبة من الأقدم (index 0) إلى الأحدث (index length - 1)
+    let candles = [];
     let baseAnchorTimeMs = Date.now();
-    let viewRightIndex = 0; // فهرس آخر شمعة ظاهرة على اليمين
+    let viewRightIndex = 0;
     let visibleCandleCount = 34;
     let selectedCandleIndex = 0;
     let isPanningCandles = false;
@@ -643,7 +665,6 @@
       else if (defaultClass) el.classList.add(defaultClass);
     }
 
-    // توليد شمعة سابقة بناءً على سعر الإغلاق بتاعها وفهرس خطوتها للخلف
     function generateOlderCandle(stepBack, nextClosePrice) {
       const cfg = TIMEFRAME_CONFIG[mapTimeframe];
       const seed = (stepBack * 131 + mapAsset.charCodeAt(0) * 17 + mapSide.charCodeAt(0) * 7 + cfg.minutes) % 997;
@@ -698,14 +719,12 @@
       baseAnchorTimeMs = Date.now();
       candles = [];
 
-      // الشمعة الحالية (stepBack = 0)
       const currentCandle = generateOlderCandle(0, latestPrice);
       currentCandle.close = latestPrice;
       currentCandle.high = Number(Math.max(currentCandle.high, latestPrice).toFixed(2));
       currentCandle.low = Number(Math.min(currentCandle.low, latestPrice).toFixed(2));
       candles.push(currentCandle);
 
-      // توليد 90 شمعة أولية للخلف، ومع السحب شمال/يمين تتولد شموع بلا حدود
       prependHistoricalCandles(90);
 
       viewRightIndex = candles.length - 1;
@@ -762,7 +781,6 @@
     function renderCandlesChart() {
       if (!candles.length) return;
 
-      // ضمان توليد شموع إضافية تلقائياً كل ما المستخدم يسحب ناحية الماضي (الشمال)
       if (viewRightIndex - visibleCandleCount < 20) {
         prependHistoricalCandles(50);
       }
@@ -775,7 +793,6 @@
         selectedCandleIndex = endIdx;
       }
 
-      // حساب أعلى وأقل سعر في الشموع الظاهرة فقط عشان الأرقام على الجنب تتغير ديناميكياً مع السحب
       let rawMin = Infinity;
       let rawMax = -Infinity;
       for (const c of slice) {
@@ -787,22 +804,32 @@
       const maxPrice = rawMax + rawSpan * 0.08;
       const totalSpan = Math.max(0.5, maxPrice - minPrice);
 
-      // تحديث الأرقام الكثيرة على الجنب (9 مستويات متدرجة تتغير مع حركة الشاشة)
+      const selCandle = candles[selectedCandleIndex] || candles[endIdx];
+      const isBull = selCandle.close >= selCandle.open;
+      const diff = selCandle.close - selCandle.open;
+
+      const padLeft = 10;
+      const padRight = 10;
+      const padTop = 14;
+      const padBottom = 26;
+      const height = 310;
+      const plotH = Math.max(20, height - padTop - padBottom);
+      const priceToY = (p) => padTop + plotH - ((p - minPrice) / totalSpan) * plotH;
+
+      // تحديث الأرقام الكثيرة على الجنب + إظهار رقم سعر الشمعة المحددة المظبوط في مكانه على الجنب
       const yAxisEl = document.getElementById('map-y-axis');
       if (yAxisEl) {
         const ticksCount = 9;
         const spans = [];
         for (let t = 0; t < ticksCount; t++) {
           const val = maxPrice - (t / (ticksCount - 1)) * totalSpan;
-          spans.push(`<span>${formatShortPrice(val)}</span>`);
+          spans.push(`<span class="y-tick">${formatShortPrice(val)}</span>`);
         }
+        const tagY = priceToY(selCandle.close);
+        const tagClass = isBull ? 'selected-price-tag' : 'selected-price-tag down-tag';
+        spans.push(`<span class="${tagClass}" style="top:${tagY}px;">${formatShortPrice(selCandle.close)}</span>`);
         yAxisEl.innerHTML = spans.join('');
       }
-
-      // تحديث شريط بيانات الشمعة المحددة (Open / High / Low / Close)
-      const selCandle = candles[selectedCandleIndex] || candles[endIdx];
-      const isBull = selCandle.close >= selCandle.open;
-      const diff = selCandle.close - selCandle.open;
 
       const timeEl = document.getElementById('candle-time-label');
       const dirEl = document.getElementById('candle-dir-label');
@@ -825,12 +852,10 @@
         countEl.textContent = `شموع محمّلة: ${candles.length} شمعة | اسحب للماضي بلا حدود`;
       }
 
-      // رسم الشموع على الـ Canvas
       const canvas = document.getElementById('gold-map-canvas');
       if (!canvas) return;
       const wrap = canvas.parentElement;
       const width = Math.max(220, wrap.clientWidth || 560);
-      const height = 310;
       const dpr = window.devicePixelRatio || 1;
 
       canvas.width = width * dpr;
@@ -840,16 +865,8 @@
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, width, height);
 
-      const padLeft = 10;
-      const padRight = 10;
-      const padTop = 14;
-      const padBottom = 26;
       const plotW = Math.max(20, width - padLeft - padRight);
-      const plotH = Math.max(20, height - padTop - padBottom);
 
-      const priceToY = (p) => padTop + plotH - ((p - minPrice) / totalSpan) * plotH;
-
-      // رسم شبكة أفقية مطابقة لمستويات الأرقام على الجنب
       ctx.strokeStyle = '#1d1d1d';
       ctx.lineWidth = 1;
       for (let g = 0; g < 9; g++) {
@@ -874,13 +891,11 @@
         const yOpen = priceToY(c.open);
         const yClose = priceToY(c.close);
 
-        // خلفية خفيفة للشمعة المحددة
         if (globalIdx === selectedCandleIndex) {
           ctx.fillStyle = 'rgba(255, 213, 79, 0.10)';
           ctx.fillRect(centerX - stepW / 2, padTop, stepW, plotH);
         }
 
-        // الفتيل العلوي والسفلي (High - Low)
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.4;
         ctx.beginPath();
@@ -888,13 +903,11 @@
         ctx.lineTo(centerX, yLow);
         ctx.stroke();
 
-        // جسم الشمعة (Open - Close)
         const topY = Math.min(yOpen, yClose);
         const bodyH = Math.max(2, Math.abs(yClose - yOpen));
         ctx.fillStyle = color;
         ctx.fillRect(centerX - bodyW / 2, topY, bodyW, bodyH);
 
-        // كتابة الوقت على المحور السفلي كل عدة شموع
         if (i % 7 === 0 || i === slice.length - 1) {
           const d = new Date(c.timeMs);
           const shortTime = mapTimeframe === '1d'
@@ -907,7 +920,6 @@
         }
       });
 
-      // خط أفقي متقطع عند سعر إغلاق الشمعة المحددة
       const selY = priceToY(selCandle.close);
       ctx.strokeStyle = '#ffd54f';
       ctx.setLineDash([4, 4]);
@@ -958,7 +970,6 @@
         const stepPx = Math.max(6, (rect.width - 20) / visibleCandleCount);
         const shiftCandles = dx / stepPx;
 
-        // السحب ناحية اليمين أو الشمال يحرك الشموع بسلاسة، وعند الرجوع للماضي يزيد الشموع بلا حدود
         let nextRight = panStartRightIndex - shiftCandles;
         if (nextRight > candles.length - 1) {
           nextRight = candles.length - 1;

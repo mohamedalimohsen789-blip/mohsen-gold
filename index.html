@@ -161,7 +161,7 @@
 
     <!-- صفحة المساعد الذكي -->
     <div id="page-ai" class="page">
-      <div class="note">تعلّم وحفظ وتخمين إملائي — يفهم الحروف الغلط ويربط الكلام ويعرض الأسعار بالـ EGP.</div>
+      <div class="note">تفاعل منطقي وحفظ ذاتي وتخمين إملائي — يفهم الحروف الناقصة أو المختلفة ويرد على أي كلام والأسعار بالـ EGP.</div>
       <div id="chat-box" class="chat-box">
         <div id="welcome-msg" class="msg bot-msg">أهلاً بيك. اتكلم معايا في أي موضوع، ولو قولتلي اسمك هحفظه، ولو صححتلي فكرة هتعلمها، وكمان تقدر تقيّم ردي تحت كل رسالة.</div>
       </div>
@@ -183,7 +183,7 @@
 
     const CUSTOM_API_URL = '';
     const PRICE_STORAGE_KEY = 'gold_last_snapshot_v3';
-    const MEMORY_STORAGE_KEY = 'ai_adaptive_memory_v6';
+    const MEMORY_STORAGE_KEY = 'ai_adaptive_memory_v7';
 
     const STOP_WORDS = new Set([
       'في', 'من', 'على', 'الى', 'إلى', 'عن', 'مع', 'ده', 'دي', 'دا', 'هو', 'هي',
@@ -194,8 +194,13 @@
     const KNOWN_VOCABULARY = [
       'عيار', 'جنيه', 'ذهب', 'دهب', 'سعر', 'اسعار', 'بكام', 'شراء', 'بيع',
       'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور', 'شكرا', 'تسلم',
-      'اسمي', 'انسى', 'امسح', 'معقول', 'بجد', 'ازاي', 'ليه', 'تضخم', 'فايده', 'مصنعيه'
+      'اسمي', 'انسى', 'امسح', 'معقول', 'بجد', 'ازاي', 'ليه', 'تضخم', 'فايده', 'مصنعيه',
+      'عامل', 'معلومه', 'توقعات', 'ادخار', 'استثمار', 'مقارنه', 'تحديث', 'اشعار'
     ];
+
+    const GREETING_WORDS = new Set([
+      'اهلا', 'مرحبا', 'سلام', 'هاي', 'هلا', 'ازيك', 'اخبارك', 'منور', 'صباح', 'مساء', 'عامل'
+    ]);
 
     let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
     let hasInitialBaseline = false;
@@ -241,7 +246,7 @@
     function applySavedWelcomeName() {
       const welcomeEl = document.getElementById('welcome-msg');
       if (welcomeEl && memoryStore.userProfile && memoryStore.userProfile.name) {
-        welcomeEl.innerHTML = `أهلاً بيك يا <b>${escapeHtml(memoryStore.userProfile.name)}</b>. اتكلم معايا في أي موضوع، ولو صححتلي فكرة هتعلمها، وكمان تقدر تقيّم ردي تحت كل رسالة.`;
+        welcomeEl.innerHTML = `أهلاً بيك يا <b>${escapeHtml(memoryStore.userProfile.name)}</b>. اتكلم معايا في أي موضوع، ولو قولتلي اسمك هحفظه، ولو صححتلي فكرة هتعلمها، وكمان تقدر تقيّم ردي تحت كل رسالة.`;
       }
     }
 
@@ -444,14 +449,14 @@
     }
 
     function guessClosestWord(word, candidates) {
-      if (!word || word.length < 3 || /^\d+$/.test(word)) return word;
+      if (!word || word.length < 2 || /^\d+$/.test(word)) return word;
       let bestWord = word;
       let bestDist = Infinity;
 
       for (const cand of candidates) {
         if (!cand || Math.abs(cand.length - word.length) > 2) continue;
         const dist = levenshteinDistance(word, cand);
-        const maxAllowed = cand.length <= 4 ? 1 : 2;
+        const maxAllowed = cand.length <= 3 ? 1 : (cand.length <= 5 ? 1 : 2);
         if (dist > 0 && dist <= maxAllowed && dist < bestDist) {
           bestDist = dist;
           bestWord = cand;
@@ -465,7 +470,7 @@
       for (const pair of memoryStore.pairs || []) {
         const parts = normalizeArabic(pair.promptNorm || '').split(' ');
         for (const p of parts) {
-          if (p.length >= 3 && !STOP_WORDS.has(p)) {
+          if (p.length >= 2 && !STOP_WORDS.has(p)) {
             learnedWords.push(p);
           }
         }
@@ -669,7 +674,7 @@
         ? `${escapeHtml(memoryStore.userProfile.name)}، `
         : '';
       const typoHint = guesses.length > 0
-        ? `(تخمين الإملاء: ${guesses.map((g) => `"${escapeHtml(g.original)}" -> "${escapeHtml(g.guessed)}"`).join('، ')}) `
+        ? `<span style="color:#9e9e9e;font-size:12px;">(فهمتها بعد تعديل الإملاء: ${guesses.map((g) => `"${escapeHtml(g.original)}" -> "${escapeHtml(g.guessed)}"`).join('، ')})</span><br>`
         : '';
 
       const asksPriceValue = /عيار\s*(24|21|18)|24k|21k|18k|جنيه ذهب|الجنيه|سعر الذهب|اسعار الذهب|الذهب بكام|الدهب بكام|بكام/.test(clean);
@@ -713,22 +718,23 @@
         const prev = relatedHistory[relatedHistory.length - 1];
         lastReasoningMeta = { type: 'history', refText: prev.text };
         return pickVariant([
-          `${namePrefix}${typoHint}بربط سؤالك عن (${keywords.join('، ') || clean}) بكلامك السابق بخصوص "${escapeHtml(prev.text)}"، الفكرة هنا بتعتمد على المعطيات الحالية والهدف من كلامك. وضّح النقطة اللي تقصدها وهسجلها وأبني عليها.`,
-          `${namePrefix}${typoHint}بناءً على اللي قلته قبل كده عن "${escapeHtml(prev.text)}"، الكلام دلوقتي حوالين (${keywords.join('، ') || clean}) بيحتاج نحدّد الزاوية المقصودة عشان الرد يكون أدق.`
+          `${namePrefix}${typoHint}بناءً على كلامك السابق عن "${escapeHtml(prev.text)}"، النقطة دي مرتبطة بيه من زاوية التطبيق والقرار؛ تحب نركز على أي جزء فيها؟`,
+          `${namePrefix}${typoHint}ربطت كلامك دلوقتي باللي قلته قبل كده بخصوص "${escapeHtml(prev.text)}"؛ قولّي إيه النتيجة أو الفكرة اللي عايز نوصلها.`
         ], `hist_${clean}`);
       }
 
       lastReasoningMeta = { type: 'general' };
-      if (keywords.length > 0) {
+      const topicLabel = keywords.length > 0 ? keywords.join('، ') : clean;
+      if (topicLabel) {
         return pickVariant([
-          `${namePrefix}${typoHint}بخصوص (${keywords.join('، ')})، قولّي إيه المعنى أو الفكرة اللي تقصدها في حالتك عشان أتعلمها وأستخدمها في ردودي.`,
-          `${namePrefix}${typoHint}واضح إن كلامك رايح ناحية (${keywords.join('، ')})؛ لو في نقطة محددة عايز نثبتها أو نوضحها قولي وأنا هربطها.`
-        ], `kw_${keywords.join('_')}`);
+          `${namePrefix}${typoHint}فاهم قصدك حوالين (${escapeHtml(topicLabel)})؛ ده موضوع بيختلف حسب الحالة والهدف، وقولّي إيه رأيك أو النقطة اللي شاغلَتك فيه عشان نكمّل فيها.`,
+          `${namePrefix}${typoHint}وصلتني فكرتك عن (${escapeHtml(topicLabel)})؛ احكيلي أكتر إيه اللي تقصده بالظبط عشان أرد عليك بشكل أدق وأحفظ اللي تحبه.`
+        ], `kw_${topicLabel}`);
       }
 
       return pickVariant([
-        `${namePrefix}${typoHint}وضّحلي أكتر تقصد إيه بالظبط، ولو في فكرة معينة شايفها الأنسب في الموضوع ده قولّي وهتعلمها.`,
-        `${namePrefix}${typoHint}قولي تفاصيل أكتر عن اللي في بالك عشان أرد بشكل أدق وأحفظ اللي يهمك.`
+        `${namePrefix}${typoHint}أنا متابع معاك؛ قولي إيه اللي في بالك أو تحب نتكلم في إيه دلوقتي؟`,
+        `${namePrefix}${typoHint}سمعك، قولي تقصد إيه أو تحب نناقش أي موضوع؟`
       ], `gen_${clean}`);
     }
 
@@ -769,19 +775,26 @@
       if (learnedMatch) {
         lastReasoningMeta = { type: 'learned' };
         const typoNote = guesses.length > 0
-          ? `<span style="color:#9e9e9e;font-size:12px;">(تخمين إملائي: ${guesses.map((g) => `"${escapeHtml(g.original)}" -> "${escapeHtml(g.guessed)}"`).join('، ')})</span><br>`
+          ? `<span style="color:#9e9e9e;font-size:12px;">(فهمتها بعد تعديل الإملاء: ${guesses.map((g) => `"${escapeHtml(g.original)}" -> "${escapeHtml(g.guessed)}"`).join('، ')})</span><br>`
           : '';
         return `${typoNote}${escapeHtml(learnedMatch.answer)}`;
       }
 
-      if (/^(اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|hi|hello|hey|ازيك|ازيكم|عامل ايه|اخبارك|منور|منورين)$/.test(clean)) {
+      const wordsInClean = clean.split(' ').filter(Boolean);
+      const isGreeting = /^(اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|hi|hello|hey|ازيك|ازيكم|عامل ايه|اخبارك|منور|منورين)$/.test(clean)
+        || (wordsInClean.length === 1 && GREETING_WORDS.has(wordsInClean[0]));
+
+      if (isGreeting) {
         lastReasoningMeta = { type: 'general' };
         const greetingName = memoryStore.userProfile && memoryStore.userProfile.name
           ? ` يا ${escapeHtml(memoryStore.userProfile.name)}`
           : '';
+        const typoNote = guesses.length > 0
+          ? `<span style="color:#9e9e9e;font-size:12px;">(فهمتها بعد تعديل الإملاء: ${guesses.map((g) => `"${escapeHtml(g.original)}" -> "${escapeHtml(g.guessed)}"`).join('، ')})</span><br>`
+          : '';
         return pickVariant([
-          `أهلاً بيك${greetingName}. إزاي أقدر أساعدك أو نناقش إيه دلوقتي؟`,
-          `أهلاً بيك${greetingName}. قولي تحب نتكلم في إيه النهارده؟`
+          `${typoNote}أهلاً بيك${greetingName}. إزاي أقدر أساعدك أو نناقش إيه دلوقتي؟`,
+          `${typoNote}أهلاً بيك${greetingName}. قولي تحب نتكلم في إيه النهارده؟`
         ], 'greeting');
       }
 

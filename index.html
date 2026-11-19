@@ -161,7 +161,7 @@
 
     <!-- صفحة المساعد الذكي -->
     <div id="page-ai" class="page">
-      <div class="note">تعلّم وحفظ بيانات محلي — يفتكر اسمك وتوضيحاتك ويعرض الأسعار بالـ EGP.</div>
+      <div class="note">تعلّم وحفظ وتخمين إملائي — يفهم الحروف الغلط ويربط الكلام ويعرض الأسعار بالـ EGP.</div>
       <div id="chat-box" class="chat-box">
         <div id="welcome-msg" class="msg bot-msg">أهلاً بيك. اتكلم معايا في أي موضوع، ولو قولتلي اسمك هحفظه، ولو صححتلي فكرة هتعلمها، وكمان تقدر تقيّم ردي تحت كل رسالة.</div>
       </div>
@@ -183,7 +183,7 @@
 
     const CUSTOM_API_URL = '';
     const PRICE_STORAGE_KEY = 'gold_last_snapshot_v3';
-    const MEMORY_STORAGE_KEY = 'ai_adaptive_memory_v4';
+    const MEMORY_STORAGE_KEY = 'ai_adaptive_memory_v6';
 
     const STOP_WORDS = new Set([
       'في', 'من', 'على', 'الى', 'إلى', 'عن', 'مع', 'ده', 'دي', 'دا', 'هو', 'هي',
@@ -191,10 +191,18 @@
       'مش', 'لو', 'كان', 'يكون', 'كده', 'كذا', 'بس', 'يعني', 'اللي', 'و', 'او', 'أو'
     ]);
 
+    const KNOWN_VOCABULARY = [
+      'عيار', 'جنيه', 'ذهب', 'دهب', 'سعر', 'اسعار', 'بكام', 'شراء', 'بيع',
+      'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور', 'شكرا', 'تسلم',
+      'اسمي', 'انسى', 'امسح', 'معقول', 'بجد', 'ازاي', 'ليه', 'تضخم', 'فايده', 'مصنعيه'
+    ];
+
     let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
     let hasInitialBaseline = false;
     let conversationHistory = [];
     let pendingCorrectionTarget = null;
+    let lastReasoningMeta = null;
+    let repeatCounters = {};
     let memoryStore = loadMemoryStore();
 
     function cloneGoldData(data) {
@@ -414,6 +422,77 @@
         .trim();
     }
 
+    function levenshteinDistance(a, b) {
+      const m = a.length;
+      const n = b.length;
+      if (m === 0) return n;
+      if (n === 0) return m;
+      const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + cost
+          );
+        }
+      }
+      return dp[m][n];
+    }
+
+    function guessClosestWord(word, candidates) {
+      if (!word || word.length < 3 || /^\d+$/.test(word)) return word;
+      let bestWord = word;
+      let bestDist = Infinity;
+
+      for (const cand of candidates) {
+        if (!cand || Math.abs(cand.length - word.length) > 2) continue;
+        const dist = levenshteinDistance(word, cand);
+        const maxAllowed = cand.length <= 4 ? 1 : 2;
+        if (dist > 0 && dist <= maxAllowed && dist < bestDist) {
+          bestDist = dist;
+          bestWord = cand;
+        }
+      }
+      return bestWord;
+    }
+
+    function buildDynamicCandidates() {
+      const learnedWords = [];
+      for (const pair of memoryStore.pairs || []) {
+        const parts = normalizeArabic(pair.promptNorm || '').split(' ');
+        for (const p of parts) {
+          if (p.length >= 3 && !STOP_WORDS.has(p)) {
+            learnedWords.push(p);
+          }
+        }
+      }
+      return Array.from(new Set([...KNOWN_VOCABULARY, ...learnedWords]));
+    }
+
+    function applyTypoCorrection(rawText) {
+      const clean = normalizeArabic(rawText);
+      const candidates = buildDynamicCandidates();
+      const words = clean.split(' ');
+      const guesses = [];
+
+      const correctedWords = words.map((w) => {
+        const guessed = guessClosestWord(w, candidates);
+        if (guessed !== w) {
+          guesses.push({ original: w, guessed });
+        }
+        return guessed;
+      });
+
+      return {
+        correctedText: correctedWords.join(' ').trim(),
+        guesses
+      };
+    }
+
     function extractKeywords(str) {
       return normalizeArabic(str)
         .split(' ')
@@ -430,6 +509,12 @@
 
     function stripHtml(str) {
       return String(str).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function pickVariant(variants, key) {
+      const idx = repeatCounters[key] || 0;
+      repeatCounters[key] = idx + 1;
+      return variants[idx % variants.length];
     }
 
     function handleUserNameCommands(rawText) {
@@ -462,6 +547,51 @@
       }
 
       return null;
+    }
+
+    function handleSurpriseOrIntelligenceComment(rawText) {
+      const clean = normalizeArabic(rawText);
+      const isSurprise = /^(معقول|بجد|والله|يا سلام|اوباه|واو|غريب|عجيب|مش ممكن|ازاي ده|ايوه بقي|جامد|حلو ده)\s*[؟!.]*$/.test(clean);
+      const asksWhyOrHow = /^(ازاي\s+(عرفت|جبتها|فهمت|عملتها)|ليه\s+(قلت|رديت|اخترت)\s+كده|عندك\s+ذكاء|فاهم\s+انت)\s*[؟!.]*$/.test(clean);
+
+      if (!isSurprise && !asksWhyOrHow) return null;
+
+      const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
+        ? `${escapeHtml(memoryStore.userProfile.name)}، `
+        : '';
+
+      if (!lastReasoningMeta) {
+        return pickVariant([
+          `${namePrefix}أيوة، بحاول أربط الكلام بالمعطيات المتاحة قدامي وباللي اتقال في الجلسة أو اتحفظ في الذاكرة. قولي في إيه بالظبط عشان أكون أدق.`,
+          `${namePrefix}اللي بعمله هو مطابقة الكلمات والسياق والبيانات المحفوظة عندي؛ لو في نقطة معينة لفتت نظرك وضّحها وهبني عليها.`
+        ], 'meta_no_context');
+      }
+
+      if (lastReasoningMeta.type === 'learned') {
+        return pickVariant([
+          `${namePrefix}أيوة، ده جبته من اللي اتحفظ في الذاكرة لما وضّحنا أو قيّمنا الكلام قبل كده، وربطته بسؤالك الحالي.`,
+          `${namePrefix}ما هو مش من فراغ؛ ده كان متسجّل في الذاكرة من حوار سابق أو تعديل، ولما سألت استدعيته وطبّقته.`
+        ], 'meta_learned');
+      }
+
+      if (lastReasoningMeta.type === 'price') {
+        return pickVariant([
+          `${namePrefix}أيوة، حسبتلك الرقم من بيانات الأسعار المتاحة حالياً في البرنامج ورتبتهولك بالـ EGP حسب العيار اللي طلبته.`,
+          `${namePrefix}مفيش تخمين في الأرقام؛ خدت القيمة الحالية المعروضة في الكود وعرضتها بالـ EGP على حسب سؤالك.`
+        ], 'meta_price');
+      }
+
+      if (lastReasoningMeta.type === 'history') {
+        return pickVariant([
+          `${namePrefix}أيوة، ربطت كلامك دلوقتي بكلامك السابق عن "${escapeHtml(lastReasoningMeta.refText)}" عشان الرد ما يبقاش مقطوع عن السياق.`,
+          `${namePrefix}ده ربط مباشر بين سؤالك الحالي وبين نقطة ذكرتها قبل كده في الشات بخصوص "${escapeHtml(lastReasoningMeta.refText)}".`
+        ], 'meta_history');
+      }
+
+      return pickVariant([
+        `${namePrefix}أيوة، بحلل الكلمات المفتاحية في كلامك وبحاول أدي رد منطقي يفتح معاك توضيح أو يبني على اللي بتقوله.`,
+        `${namePrefix}فكرتها إنّي بقرا الكلمات الأساسية في رسالتك وأربطها بالسياق المتاح بدل ما أرمي رد عشوائي.`
+      ], 'meta_general');
     }
 
     function learnAssociation(promptText, answerText, weightBoost = 1) {
@@ -532,28 +662,47 @@
       return bestScore >= 2.2 ? best : null;
     }
 
-    function synthesizeDynamicAnswer(rawText) {
+    function synthesizeDynamicAnswer(rawText, guesses = []) {
       const clean = normalizeArabic(rawText);
       const keywords = extractKeywords(rawText);
       const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
         ? `${escapeHtml(memoryStore.userProfile.name)}، `
         : '';
+      const typoHint = guesses.length > 0
+        ? `(تخمين الإملاء: ${guesses.map((g) => `"${escapeHtml(g.original)}" -> "${escapeHtml(g.guessed)}"`).join('، ')}) `
+        : '';
 
       const asksPriceValue = /عيار\s*(24|21|18)|24k|21k|18k|جنيه ذهب|الجنيه|سعر الذهب|اسعار الذهب|الذهب بكام|الدهب بكام|بكام/.test(clean);
       if (asksPriceValue) {
+        lastReasoningMeta = { type: 'price' };
         if (/عيار 21|21k/.test(clean)) {
-          return `${namePrefix}عيار 21 الحالي: شراء ${formatEGP(currentGoldData.k21.buy)} وبيع ${formatEGP(currentGoldData.k21.sell)}.`;
+          return pickVariant([
+            `${namePrefix}${typoHint}عيار 21 الحالي: شراء ${formatEGP(currentGoldData.k21.buy)} وبيع ${formatEGP(currentGoldData.k21.sell)}.`,
+            `${namePrefix}${typoHint}سعر عيار 21 دلوقتي على الشاشة شراء ${formatEGP(currentGoldData.k21.buy)} والبيع ${formatEGP(currentGoldData.k21.sell)}.`
+          ], 'price_21');
         }
         if (/عيار 24|24k/.test(clean)) {
-          return `${namePrefix}عيار 24 الحالي: شراء ${formatEGP(currentGoldData.k24.buy)} وبيع ${formatEGP(currentGoldData.k24.sell)}.`;
+          return pickVariant([
+            `${namePrefix}${typoHint}عيار 24 الحالي: شراء ${formatEGP(currentGoldData.k24.buy)} وبيع ${formatEGP(currentGoldData.k24.sell)}.`,
+            `${namePrefix}${typoHint}عيار 24 مسجّل حالياً شراء ${formatEGP(currentGoldData.k24.buy)} وبيع ${formatEGP(currentGoldData.k24.sell)}.`
+          ], 'price_24');
         }
         if (/عيار 18|18k/.test(clean)) {
-          return `${namePrefix}عيار 18 الحالي: شراء ${formatEGP(currentGoldData.k18.buy)} وبيع ${formatEGP(currentGoldData.k18.sell)}.`;
+          return pickVariant([
+            `${namePrefix}${typoHint}عيار 18 الحالي: شراء ${formatEGP(currentGoldData.k18.buy)} وبيع ${formatEGP(currentGoldData.k18.sell)}.`,
+            `${namePrefix}${typoHint}سعر عيار 18 دلوقتي شراء ${formatEGP(currentGoldData.k18.buy)} والبيع ${formatEGP(currentGoldData.k18.sell)}.`
+          ], 'price_18');
         }
         if (/جنيه ذهب|الجنيه/.test(clean)) {
-          return `${namePrefix}الجنيه الذهب الحالي: شراء ${formatEGP(currentGoldData.pound.buy)} وبيع ${formatEGP(currentGoldData.pound.sell)}.`;
+          return pickVariant([
+            `${namePrefix}${typoHint}الجنيه الذهب الحالي: شراء ${formatEGP(currentGoldData.pound.buy)} وبيع ${formatEGP(currentGoldData.pound.sell)}.`,
+            `${namePrefix}${typoHint}سعر الجنيه الذهب دلوقتي شراء ${formatEGP(currentGoldData.pound.buy)} والبيع ${formatEGP(currentGoldData.pound.sell)}.`
+          ], 'price_pound');
         }
-        return `${namePrefix}الأسعار الحالية: عيار 24 شراء ${formatEGP(currentGoldData.k24.buy)} / بيع ${formatEGP(currentGoldData.k24.sell)}، عيار 21 شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}، عيار 18 شراء ${formatEGP(currentGoldData.k18.buy)} / بيع ${formatEGP(currentGoldData.k18.sell)}، والجنيه الذهب شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}.`;
+        return pickVariant([
+          `${namePrefix}${typoHint}الأسعار الحالية: عيار 24 شراء ${formatEGP(currentGoldData.k24.buy)} / بيع ${formatEGP(currentGoldData.k24.sell)}، عيار 21 شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}، عيار 18 شراء ${formatEGP(currentGoldData.k18.buy)} / بيع ${formatEGP(currentGoldData.k18.sell)}، والجنيه الذهب شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}.`,
+          `${namePrefix}${typoHint}المتاح حالياً: 24K (شراء ${formatEGP(currentGoldData.k24.buy)} / بيع ${formatEGP(currentGoldData.k24.sell)})، 21K (شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)})، 18K (شراء ${formatEGP(currentGoldData.k18.buy)} / بيع ${formatEGP(currentGoldData.k18.sell)})، والجنيه (شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}).`
+        ], 'price_all');
       }
 
       const relatedHistory = conversationHistory
@@ -562,23 +711,41 @@
 
       if (relatedHistory.length > 0) {
         const prev = relatedHistory[relatedHistory.length - 1];
-        return `${namePrefix}بربط سؤالك عن (${keywords.join('، ') || clean}) بكلامك السابق بخصوص "${escapeHtml(prev.text)}"، النقطة الأساسية هنا هي إن القرار أو التقييم بيعتمد على المعطيات الفعلية وقتها والهدف من كلامك. لو في زاوية معينة تقصدها وضّحها وهسجلها وأبني عليها.`;
+        lastReasoningMeta = { type: 'history', refText: prev.text };
+        return pickVariant([
+          `${namePrefix}${typoHint}بربط سؤالك عن (${keywords.join('، ') || clean}) بكلامك السابق بخصوص "${escapeHtml(prev.text)}"، الفكرة هنا بتعتمد على المعطيات الحالية والهدف من كلامك. وضّح النقطة اللي تقصدها وهسجلها وأبني عليها.`,
+          `${namePrefix}${typoHint}بناءً على اللي قلته قبل كده عن "${escapeHtml(prev.text)}"، الكلام دلوقتي حوالين (${keywords.join('، ') || clean}) بيحتاج نحدّد الزاوية المقصودة عشان الرد يكون أدق.`
+        ], `hist_${clean}`);
       }
 
+      lastReasoningMeta = { type: 'general' };
       if (keywords.length > 0) {
-        return `${namePrefix}بخصوص (${keywords.join('، ')})، مفيش إجابة جاهزة موحدة تناسب كل الحالات من غير توضيح السياق. قولّي إيه النقطة اللي عايز توصلها أو إيه الفكرة المناسبة في حالتك عشان أحفظها وأتعامل بيها في الكلام الجاي.`;
+        return pickVariant([
+          `${namePrefix}${typoHint}بخصوص (${keywords.join('، ')})، قولّي إيه المعنى أو الفكرة اللي تقصدها في حالتك عشان أتعلمها وأستخدمها في ردودي.`,
+          `${namePrefix}${typoHint}واضح إن كلامك رايح ناحية (${keywords.join('، ')})؛ لو في نقطة محددة عايز نثبتها أو نوضحها قولي وأنا هربطها.`
+        ], `kw_${keywords.join('_')}`);
       }
 
-      return `${namePrefix}وضّحلي أكتر تقصد إيه بالظبط، ولو في معلومة أو صياغة معينة شايفها الأنسب في الموضوع ده قولّي وهتعلمها وأبني عليها.`;
+      return pickVariant([
+        `${namePrefix}${typoHint}وضّحلي أكتر تقصد إيه بالظبط، ولو في فكرة معينة شايفها الأنسب في الموضوع ده قولّي وهتعلمها.`,
+        `${namePrefix}${typoHint}قولي تفاصيل أكتر عن اللي في بالك عشان أرد بشكل أدق وأحفظ اللي يهمك.`
+      ], `gen_${clean}`);
     }
 
     function generateSmartReply(rawText) {
       const trimmed = rawText.trim();
-      const clean = normalizeArabic(trimmed);
+      const { correctedText, guesses } = applyTypoCorrection(trimmed);
+      const clean = normalizeArabic(correctedText);
 
-      const nameReply = handleUserNameCommands(trimmed);
+      const nameReply = handleUserNameCommands(trimmed) || handleUserNameCommands(correctedText);
       if (nameReply) {
+        lastReasoningMeta = { type: 'learned' };
         return nameReply;
+      }
+
+      const metaReply = handleSurpriseOrIntelligenceComment(correctedText);
+      if (metaReply) {
+        return metaReply;
       }
 
       if (pendingCorrectionTarget) {
@@ -586,29 +753,39 @@
         pendingCorrectionTarget = null;
         const cleanedExplanation = trimmed.replace(/^(لا|مش كده|غلط|صحح|المقصود|قصدي|معناه|بمعنى|يعني)\s*/i, '').trim() || trimmed;
         learnAssociation(target.userPrompt, cleanedExplanation, 2);
+        lastReasoningMeta = { type: 'learned' };
         return `تمام، اتعلمت التعديل ده وربطته بسؤالك "${escapeHtml(target.userPrompt)}" عشان أجاوبك بيه بعد كده.`;
       }
 
       const lastUserMsg = [...conversationHistory].reverse().find((m) => m.role === 'user');
-      if (isCorrectionOrClarification(trimmed) && lastUserMsg && lastUserMsg.text !== trimmed) {
+      if (isCorrectionOrClarification(correctedText) && lastUserMsg && lastUserMsg.text !== trimmed) {
         const cleanedClarification = trimmed.replace(/^(لا|مش كده|غلط|صحح|المقصود|قصدي|معناه|بمعنى|يعني)\s*/i, '').trim() || trimmed;
         learnAssociation(lastUserMsg.text, cleanedClarification, 2);
+        lastReasoningMeta = { type: 'learned' };
         return `فهمت قصدك؛ ربطت التوضيح ده بكلامك السابق عن "${escapeHtml(lastUserMsg.text)}" وهعتمد عليه في ردودي.`;
       }
 
-      const learnedMatch = findBestLearnedMatch(trimmed);
+      const learnedMatch = findBestLearnedMatch(correctedText) || findBestLearnedMatch(trimmed);
       if (learnedMatch) {
-        return escapeHtml(learnedMatch.answer);
+        lastReasoningMeta = { type: 'learned' };
+        const typoNote = guesses.length > 0
+          ? `<span style="color:#9e9e9e;font-size:12px;">(تخمين إملائي: ${guesses.map((g) => `"${escapeHtml(g.original)}" -> "${escapeHtml(g.guessed)}"`).join('، ')})</span><br>`
+          : '';
+        return `${typoNote}${escapeHtml(learnedMatch.answer)}`;
       }
 
       if (/^(اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|hi|hello|hey|ازيك|ازيكم|عامل ايه|اخبارك|منور|منورين)$/.test(clean)) {
+        lastReasoningMeta = { type: 'general' };
         const greetingName = memoryStore.userProfile && memoryStore.userProfile.name
           ? ` يا ${escapeHtml(memoryStore.userProfile.name)}`
           : '';
-        return `أهلاً بيك${greetingName}. إزاي أقدر أساعدك أو نناقش إيه دلوقتي؟`;
+        return pickVariant([
+          `أهلاً بيك${greetingName}. إزاي أقدر أساعدك أو نناقش إيه دلوقتي؟`,
+          `أهلاً بيك${greetingName}. قولي تحب نتكلم في إيه النهارده؟`
+        ], 'greeting');
       }
 
-      return synthesizeDynamicAnswer(trimmed);
+      return synthesizeDynamicAnswer(correctedText, guesses);
     }
 
     function rateBotMessage(msgId, isGood, goodBtn, badBtn) {

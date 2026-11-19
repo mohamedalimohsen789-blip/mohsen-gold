@@ -38,6 +38,18 @@
     .container { padding: 16px; max-width: 700px; margin: auto; }
     .page { display: none; }
     .page.active { display: block; }
+    .notif-banner {
+      display: none;
+      background-color: #102a21;
+      border: 1px solid #00e676;
+      color: #d8ffeb;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .notif-banner.show { display: block; }
     .card {
       background-color: #1c1c1c;
       border: 1px solid #2a2a2a;
@@ -51,6 +63,7 @@
     .karat { font-size: 17px; font-weight: bold; color: #ffd54f; }
     .prices { text-align: left; font-size: 14px; line-height: 1.7; direction: ltr; }
     .up { color: #00e676; font-weight: bold; }
+    .down { color: #ff5252; font-weight: bold; }
     .chat-box {
       background-color: #181818;
       border: 1px solid #2a2a2a;
@@ -102,6 +115,7 @@
   <div class="container">
     <!-- صفحة سوق الذهبي -->
     <div id="page-gold" class="page active">
+      <div id="gold-notif" class="notif-banner"></div>
       <div id="gold-note" class="note">Auto-checking every 30s...</div>
       <div class="card">
         <div class="karat">عيار 24</div>
@@ -143,8 +157,94 @@
       pound: { buy: 45680, sell: 46080 }
     };
 
-    let currentGoldData = { ...VERIFIED_GOLD_DATA };
     const CUSTOM_API_URL = '';
+    const STORAGE_KEY = 'mohsen_last_gold_data_v1';
+
+    let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
+    let hasInitialBaseline = false;
+
+    function cloneGoldData(data) {
+      return {
+        sourceLabel: data.sourceLabel || 'Market Feed',
+        k24: { buy: Number(data.k24.buy), sell: Number(data.k24.sell) },
+        k21: { buy: Number(data.k21.buy), sell: Number(data.k21.sell) },
+        k18: { buy: Number(data.k18.buy), sell: Number(data.k18.sell) },
+        pound: { buy: Number(data.pound.buy), sell: Number(data.pound.sell) }
+      };
+    }
+
+    function readSavedGoldData() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (isValidGoldData(parsed)) return cloneGoldData(parsed);
+      } catch (e) {}
+      return null;
+    }
+
+    function saveGoldData(data) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) {}
+    }
+
+    function isValidGoldData(data) {
+      const keys = ['k24', 'k21', 'k18', 'pound'];
+      if (!data || typeof data !== 'object') return false;
+      return keys.every((k) => {
+        const item = data[k];
+        return (
+          item &&
+          typeof item.buy === 'number' &&
+          Number.isFinite(item.buy) &&
+          item.buy > 0 &&
+          typeof item.sell === 'number' &&
+          Number.isFinite(item.sell) &&
+          item.sell > 0
+        );
+      });
+    }
+
+    function detectPriceChanges(oldData, newData) {
+      const labels = {
+        k24: '24K',
+        k21: '21K',
+        k18: '18K',
+        pound: 'Gold Pound'
+      };
+      const changes = [];
+      ['k24', 'k21', 'k18', 'pound'].forEach((key) => {
+        if (oldData[key].buy !== newData[key].buy) {
+          changes.push(`${labels[key]} Buy: ${formatEGP(oldData[key].buy)} -> ${formatEGP(newData[key].buy)}`);
+        }
+        if (oldData[key].sell !== newData[key].sell) {
+          changes.push(`${labels[key]} Sell: ${formatEGP(oldData[key].sell)} -> ${formatEGP(newData[key].sell)}`);
+        }
+      });
+      return changes;
+    }
+
+    async function triggerPriceNotification(changesText) {
+      const banner = document.getElementById('gold-notif');
+      if (banner) {
+        banner.innerHTML = `<b>تحديث جديد في الأسعار:</b><br>${changesText}`;
+        banner.classList.add('show');
+      }
+
+      if ('Notification' in window) {
+        try {
+          if (Notification.permission === 'default') {
+            await Notification.requestPermission();
+          }
+          if (Notification.permission === 'granted') {
+            new Notification('سوق الذهبي — تغير في الأسعار', {
+              body: changesText.replace(/<br>/g, ' | ')
+            });
+          }
+        } catch (e) {}
+      }
+    }
 
     function switchTab(tab) {
       document.getElementById('page-gold').classList.toggle('active', tab === 'gold');
@@ -160,29 +260,61 @@
       }) + ' EGP';
     }
 
+    function applyDirectionClass(elId, oldVal, newVal, defaultClass) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.classList.remove('up', 'down');
+      if (newVal > oldVal) {
+        el.classList.add('up');
+      } else if (newVal < oldVal) {
+        el.classList.add('down');
+      } else if (defaultClass) {
+        el.classList.add(defaultClass);
+      }
+    }
+
     async function loadGoldPrices() {
       const noteEl = document.getElementById('gold-note');
+      const previousSnapshot = cloneGoldData(currentGoldData);
+      let nextData = cloneGoldData(VERIFIED_GOLD_DATA);
 
       if (CUSTOM_API_URL) {
         try {
           const res = await fetch(CUSTOM_API_URL, { cache: 'no-store' });
           if (!res.ok) throw new Error('API response error');
           const apiData = await res.json();
-          if (apiData?.k24 && apiData?.k21 && apiData?.k18 && apiData?.pound) {
-            currentGoldData = {
+          if (isValidGoldData(apiData)) {
+            nextData = {
               sourceLabel: apiData.sourceLabel || 'Live API Feed',
-              k24: apiData.k24,
-              k21: apiData.k21,
-              k18: apiData.k18,
-              pound: apiData.pound
+              k24: { buy: Number(apiData.k24.buy), sell: Number(apiData.k24.sell) },
+              k21: { buy: Number(apiData.k21.buy), sell: Number(apiData.k21.sell) },
+              k18: { buy: Number(apiData.k18.buy), sell: Number(apiData.k18.sell) },
+              pound: { buy: Number(apiData.pound.buy), sell: Number(apiData.pound.sell) }
             };
           }
         } catch (err) {
-          currentGoldData = { ...VERIFIED_GOLD_DATA };
+          nextData = cloneGoldData(VERIFIED_GOLD_DATA);
+        }
+      }
+
+      if (hasInitialBaseline) {
+        const changes = detectPriceChanges(previousSnapshot, nextData);
+        if (changes.length > 0) {
+          await triggerPriceNotification(changes.join('<br>'));
         }
       } else {
-        currentGoldData = { ...VERIFIED_GOLD_DATA };
+        const saved = readSavedGoldData();
+        if (saved && JSON.stringify(saved) !== JSON.stringify(nextData)) {
+          const changesFromSaved = detectPriceChanges(saved, nextData);
+          if (changesFromSaved.length > 0) {
+            await triggerPriceNotification(changesFromSaved.join('<br>'));
+          }
+        }
+        hasInitialBaseline = true;
       }
+
+      currentGoldData = cloneGoldData(nextData);
+      saveGoldData(currentGoldData);
 
       document.getElementById('k24-buy').textContent = formatEGP(currentGoldData.k24.buy);
       document.getElementById('k24-sell').textContent = formatEGP(currentGoldData.k24.sell);
@@ -195,6 +327,11 @@
 
       document.getElementById('pound-buy').textContent = formatEGP(currentGoldData.pound.buy);
       document.getElementById('pound-sell').textContent = formatEGP(currentGoldData.pound.sell);
+
+      applyDirectionClass('k24-buy', previousSnapshot.k24.buy, currentGoldData.k24.buy, 'up');
+      applyDirectionClass('k21-buy', previousSnapshot.k21.buy, currentGoldData.k21.buy, 'up');
+      applyDirectionClass('k18-buy', previousSnapshot.k18.buy, currentGoldData.k18.buy, 'up');
+      applyDirectionClass('pound-buy', previousSnapshot.pound.buy, currentGoldData.pound.buy, 'up');
 
       if (noteEl) {
         const checkedAt = new Date().toLocaleTimeString('en-US', { hour12: true });

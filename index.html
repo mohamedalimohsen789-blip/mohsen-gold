@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>سوق الذهبي & Mohsen AI</title>
+  <title>سوق الذهبي & AI</title>
   <style>
     * { box-sizing: border-box; font-family: Tahoma, Arial, sans-serif; }
     body {
@@ -78,8 +78,9 @@
       border-radius: 10px;
       margin-bottom: 8px;
       max-width: 85%;
-      line-height: 1.6;
+      line-height: 1.65;
       font-size: 14px;
+      word-wrap: break-word;
     }
     .bot-msg { background-color: #242424; border-right: 3px solid #00e676; }
     .user-msg { background-color: #0d3b2e; margin-right: auto; text-align: right; }
@@ -109,7 +110,7 @@
 
   <div class="top-bar">
     <button id="tab-gold" class="tab-btn active" onclick="switchTab('gold')">سوق الذهبي</button>
-    <button id="tab-ai" class="tab-btn" onclick="switchTab('ai')">Mohsen AI</button>
+    <button id="tab-ai" class="tab-btn" onclick="switchTab('ai')">المساعد الذكي</button>
   </div>
 
   <div class="container">
@@ -135,14 +136,14 @@
       </div>
     </div>
 
-    <!-- صفحة Mohsen AI -->
+    <!-- صفحة المساعد الذكي -->
     <div id="page-ai" class="page">
-      <div class="note">Mohsen AI — كلام طبيعي ومباشر وأسعار بالـ EGP.</div>
+      <div class="note">ردود منطقية متعلِّمة — تقدر تعلّمه معلومة وتقوله (علّم: السؤال = الإجابة) والأسعار بالـ EGP.</div>
       <div id="chat-box" class="chat-box">
-        <div class="msg bot-msg">أهلاً بيك يا محسن في <b>Mohsen AI</b>. إحكي معايا عادي أو اسألني عن أي حاجة.</div>
+        <div class="msg bot-msg">أهلاً بيك. اسألني في أي حاجة أو علّمني معلومة جديدة وهحفظها وأجاوبك بيها بعد كده.</div>
       </div>
       <div class="input-row">
-        <input id="user-input" type="text" placeholder="اكتب أي حاجة في بالك..." onkeydown="if(event.key==='Enter') sendMessage()" />
+        <input id="user-input" type="text" placeholder="اكتب سؤالك أو علّمني حاجة..." onkeydown="if(event.key==='Enter') sendMessage()" />
         <button class="send-btn" onclick="sendMessage()">إرسال</button>
       </div>
     </div>
@@ -158,10 +159,14 @@
     };
 
     const CUSTOM_API_URL = '';
-    const STORAGE_KEY = 'mohsen_last_gold_data_v1';
+    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v2';
+    const LEARNED_STORAGE_KEY = 'ai_learned_knowledge_v2';
 
     let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
     let hasInitialBaseline = false;
+    let lastTopic = null;
+    let lastBotMessage = '';
+    let learnedKnowledge = loadLearnedKnowledge();
 
     function cloneGoldData(data) {
       return {
@@ -173,9 +178,26 @@
       };
     }
 
+    function loadLearnedKnowledge() {
+      try {
+        const raw = localStorage.getItem(LEARNED_STORAGE_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function saveLearnedKnowledge() {
+      try {
+        localStorage.setItem(LEARNED_STORAGE_KEY, JSON.stringify(learnedKnowledge));
+      } catch (e) {}
+    }
+
     function readSavedGoldData() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
+        const raw = localStorage.getItem(PRICE_STORAGE_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
         if (isValidGoldData(parsed)) return cloneGoldData(parsed);
@@ -185,7 +207,7 @@
 
     function saveGoldData(data) {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        localStorage.setItem(PRICE_STORAGE_KEY, JSON.stringify(data));
       } catch (e) {}
     }
 
@@ -228,7 +250,7 @@
     async function triggerPriceNotification(changesText) {
       const banner = document.getElementById('gold-notif');
       if (banner) {
-        banner.innerHTML = `<b>تحديث جديد في الأسعار:</b><br>${changesText}`;
+        banner.innerHTML = `<b>تم رصد تغير في الأسعار:</b><br>${changesText}`;
         banner.classList.add('show');
       }
 
@@ -238,7 +260,7 @@
             await Notification.requestPermission();
           }
           if (Notification.permission === 'granted') {
-            new Notification('سوق الذهبي — تغير في الأسعار', {
+            new Notification('سوق الذهبي — تحديث أسعار', {
               body: changesText.replace(/<br>/g, ' | ')
             });
           }
@@ -350,78 +372,170 @@
         .trim();
     }
 
-    function pickReply(options, seedText) {
-      let sum = 0;
-      for (let i = 0; i < seedText.length; i++) {
-        sum += seedText.charCodeAt(i);
+    function tokenize(str) {
+      return normalizeArabic(str)
+        .split(' ')
+        .filter((w) => w.length > 1);
+    }
+
+    function tryTeachFromInput(rawText) {
+      const teachMatch = rawText.match(/^(?:عل[ّم]|احفظ|سجل)\s*:?\s*(.+?)\s*(?:=|يعني|هو|هي|:)\s*(.+)$/i);
+      if (!teachMatch) return null;
+
+      const triggerRaw = teachMatch[1].trim();
+      const answerRaw = teachMatch[2].trim();
+      const triggerNorm = normalizeArabic(triggerRaw);
+
+      if (!triggerNorm || !answerRaw) return null;
+
+      const existingIndex = learnedKnowledge.findIndex((item) => item.triggerNorm === triggerNorm);
+      if (existingIndex >= 0) {
+        learnedKnowledge[existingIndex].answer = answerRaw;
+        learnedKnowledge[existingIndex].tokens = tokenize(triggerRaw);
+      } else {
+        learnedKnowledge.push({
+          triggerRaw,
+          triggerNorm,
+          tokens: tokenize(triggerRaw),
+          answer: answerRaw
+        });
       }
-      return options[sum % options.length];
+
+      saveLearnedKnowledge();
+      return `تمام، اتعلمت وحفظت: لما تسأل عن "<b>${escapeHtml(triggerRaw)}</b>" هرد عليك بـ: ${escapeHtml(answerRaw)}`;
+    }
+
+    function findLearnedAnswer(cleanText) {
+      if (!learnedKnowledge.length || !cleanText) return null;
+
+      const exact = learnedKnowledge.find((item) => cleanText.includes(item.triggerNorm) || item.triggerNorm.includes(cleanText));
+      if (exact) return exact.answer;
+
+      const inputTokens = tokenize(cleanText);
+      if (!inputTokens.length) return null;
+
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const item of learnedKnowledge) {
+        if (!item.tokens.length) continue;
+        const overlap = item.tokens.filter((t) => inputTokens.includes(t)).length;
+        const score = overlap / item.tokens.length;
+        if (overlap >= 1 && score > bestScore) {
+          bestScore = score;
+          bestMatch = item;
+        }
+      }
+
+      return bestScore >= 0.5 && bestMatch ? bestMatch.answer : null;
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function hasLiveApi() {
+      return Boolean(CUSTOM_API_URL && CUSTOM_API_URL.trim().length > 0);
     }
 
     function generateSmartReply(rawText) {
+      const teachResult = tryTeachFromInput(rawText);
+      if (teachResult) {
+        lastTopic = 'learning';
+        return teachResult;
+      }
+
       const clean = normalizeArabic(rawText);
+      const learned = findLearnedAnswer(clean);
+      if (learned) {
+        lastTopic = 'learned';
+        return escapeHtml(learned);
+      }
 
       if (/^(هلا|اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|hi|hello|hey|ازيك|ازيكم|عامل ايه|اخبارك|ايه الاخبار|منور|منورين|يا هلا|اهلين)/.test(clean)) {
-        return pickReply([
-          'هلا بيك يا محسن، منور! عامل إيه النهارده؟',
-          'أهلاً بيك يا بطل، تمام الحمد لله. قولي إيه الجديد عندك؟',
-          'يا أهلاً يا محسن، منور الدنيا. تحب نبدأ كلامنا بإيه؟'
-        ], clean);
+        lastTopic = 'greeting';
+        return 'أهلاً بيك. إزاي أقدر أساعدك النهارده؟';
       }
 
       if (/^(شكرا|متشكر|تسلم|الله يباركلك|تمام|حلو|عاش|ماشي|اوك|ok|okay|جميل|ممتاز|ربنا يخليك)/.test(clean)) {
-        return pickReply([
-          'تسلم يا محسن، على الرحب والسعة.',
-          'حبيبي يا بطل، لو احتجت أي حاجة أنا معاك.',
-          'مفيش شكر بينا يا محسن، قولي لو في حاجة تانية في بالك.'
-        ], clean);
+        return 'العفو، تحت أمرك في أي وقت.';
       }
 
       if (/مين انت|اسمك ايه|بتعمل ايه|انت مين/.test(clean)) {
-        return 'أنا <b>Mohsen AI</b>، مساعدك جوه التطبيق؛ برد على كلامك بشكل طبيعي وبعرضلك الأسعار بالـ EGP وأجاوبك على أسئلة السوق.';
+        lastTopic = 'identity';
+        return 'أنا مساعد ذكي جوه التطبيق؛ بجاوب على أسئلتك بشكل مباشر، وبقدر أحفظ معلومات جديدة لو علّمتهالي بصيغة: <b>علّم: السؤال = الإجابة</b>.';
       }
 
-      if (/هيصعد|هينزل|يصعد|ينزل|طالع|نازل|يرتفع|ينخفض|توقعات|اتجاه|مستقبل الذهب|مشتري دلوقتي|ابيع دلوقتي/.test(clean)) {
-        return pickReply([
-          'مفيش حد يقدر يضمن الذهب هيصعد ولا هينزل في لحظة معينة، لكن حركته بتعتمد أساساً على العرض والطلب في السوق، وسعر الصرف، وقرارات الفائدة والأخبار الاقتصادية. لو ناوي تشتري للادخار الطويل فالمقارنة بتكون بالمدى الزمني مش بحركة يوم واحد.',
-          'السوق بطبيعته متقلب؛ صعود الذهب وهبوطه بيرتبط بتحركات الطلب الفعلي، وسعر الصرف، وتوجهات الفائدة والتضخم. الأفضل دايماً تقسيم الشراء وعدم الاعتماد على قرار لحظي واحد.'
-        ], clean);
+      const asksTrustOrAccuracy = /موثوق|مضمون|صحيح|مظبوط|حقيقي|بيحدث|تحديث|فرق|غلط|دقيق|مصدر/.test(clean);
+      const asksExplicitPrice = /عيار\s*(24|21|18)|24k|21k|18k|جنيه ذهب|الجنيه|سعر الذهب|اسعار الذهب|الذهب بكام|الدهب بكام|بكام الجرام/.test(clean);
+
+      if (asksTrustOrAccuracy && !asksExplicitPrice) {
+        lastTopic = 'reliability';
+        if (hasLiveApi()) {
+          return 'الأسعار بتتحدث من رابط الـ API المربوط كل 30 ثانية وبتتقارن بالسعر السابق، ولو في تغير بيظهر إشعار تلقائي؛ لكن لأي قرار شراء أو بيع يفضل دايماً مراجعة الصاغة أو المصدر الرسمي وقت التنفيذ.';
+        }
+        return 'الأسعار المعروضة حالياً شغالة على بيانات محفوظة داخل الكود (`VERIFIED_GOLD_DATA`) وبتتفحص كل 30 ثانية، ومفيش رابط API حي متصل حالياً؛ يعني الأرقام مش بتتغير تلقائياً من السوق لوحدها إلا لما تربط رابط API أو تعدل القيم. الأفضل تتأكد من السوق أو الصاغة وقت التنفيذ.';
       }
 
-      if (/عيار 21|21/.test(clean)) {
+      if (/عيار 21|21k/.test(clean)) {
+        lastTopic = 'price_21';
         return `21K: Buy <b>${formatEGP(currentGoldData.k21.buy)}</b> | Sell <b>${formatEGP(currentGoldData.k21.sell)}</b>`;
       }
-      if (/عيار 24|24/.test(clean)) {
+      if (/عيار 24|24k/.test(clean)) {
+        lastTopic = 'price_24';
         return `24K: Buy <b>${formatEGP(currentGoldData.k24.buy)}</b> | Sell <b>${formatEGP(currentGoldData.k24.sell)}</b>`;
       }
-      if (/عيار 18|18/.test(clean)) {
+      if (/عيار 18|18k/.test(clean)) {
+        lastTopic = 'price_18';
         return `18K: Buy <b>${formatEGP(currentGoldData.k18.buy)}</b> | Sell <b>${formatEGP(currentGoldData.k18.sell)}</b>`;
       }
-      if (/جنيه ذهب|الجنيه|جنيه/.test(clean)) {
+      if (/جنيه ذهب|الجنيه|gold pound/.test(clean)) {
+        lastTopic = 'price_pound';
         return `Gold Pound (8g 21K): Buy <b>${formatEGP(currentGoldData.pound.buy)}</b> | Sell <b>${formatEGP(currentGoldData.pound.sell)}</b>`;
       }
-      if (/سعر الذهب|اسعار الذهب|الذهب بكام|الدهب بكام|اسعار|سعر|ذهب|دهب/.test(clean)) {
+      if (asksExplicitPrice) {
+        lastTopic = 'price_all';
         return `• <b>24K:</b> Buy ${formatEGP(currentGoldData.k24.buy)} | Sell ${formatEGP(currentGoldData.k24.sell)}<br>` +
                `• <b>21K:</b> Buy ${formatEGP(currentGoldData.k21.buy)} | Sell ${formatEGP(currentGoldData.k21.sell)}<br>` +
                `• <b>18K:</b> Buy ${formatEGP(currentGoldData.k18.buy)} | Sell ${formatEGP(currentGoldData.k18.sell)}<br>` +
                `• <b>Gold Pound:</b> Buy ${formatEGP(currentGoldData.pound.buy)} | Sell ${formatEGP(currentGoldData.pound.sell)}`;
       }
 
-      if (/تضخم/.test(clean)) {
-        return 'التضخم هو زيادة مستمرة في الأسعار وتراجع قوة الشراء للعملة، وده السبب اللي بيخلي ناس كتير تعتبر الذهب وسيلة لحفظ القيمة مع الوقت.';
-      }
-      if (/فايده|فائده|البنك المركزي/.test(clean)) {
-        return 'الفائدة لما بتزيد بتشجع البعض على الادخار البنكي، ولما بتقل بيقل عائد الكاش وبيزيد الاهتمام بأصول زي الذهب.';
-      }
-      if (/مصنعيه|السبايك|سبايك|سبيكه/.test(clean)) {
-        return 'السبائك والجنيهات مصنعيتها أقل وفيها استرداد لجزء من المصنعية أو كاش باك حسب القواعد المنظمة، عكس المشغولات اللي بتكون مصنعيتها أعلى.';
+      if (/هيصعد|هينزل|يصعد|ينزل|طالع|نازل|يرتفع|ينخفض|توقعات|اتجاه|مستقبل الذهب|مشتري دلوقتي|ابيع دلوقتي/.test(clean)) {
+        lastTopic = 'market_trend';
+        return 'حركة الذهب بتتأثر بسعر الأونصة عالمياً، وسعر الصرف محلياً، وحجم العرض والطلب والفائدة. مفيش توقع مضمون لحظياً، والقرار بيعتمد على هدفك (ادخار طويل ولا مضاربة قصيرة) ومدى تحمّلك للتقلب.';
       }
 
-      return pickReply([
-        'كلامك منطقي يا محسن، تحب نكمل في الموضوع ده ولا نغير الدفة لحاجة تانية؟',
-        'حصل، وده بيفرق من شخص للتاني حسب ظروفه وأولوياته. قولي إيه اللي شاغلك أكتر دلوقتي؟',
-        'مظبوط، أنا متابع معاك. احكيلي أكتر أو اسألني عن أي حاجة تحبها.'
-      ], clean || rawText);
+      if (/تضخم/.test(clean)) {
+        lastTopic = 'inflation';
+        return 'التضخم هو ارتفاع مستوى الأسعار وتراجع القوة الشرائية للعملة بمرور الوقت، وده السبب إن بعض الناس بتلجأ للذهب كأداة لحفظ القيمة على المدى الطويل.';
+      }
+
+      if (/فايده|فائده|البنك المركزي/.test(clean)) {
+        lastTopic = 'interest';
+        return 'رفع الفائدة غالباً بيزود جاذبية الادخار البنكي ويضغط أحياناً على الأصول غير المدرة لعائد زي الذهب، والعكس لما الفائدة بتقل.';
+      }
+
+      if (/مصنعيه|السبايك|سبايك|سبيكه/.test(clean)) {
+        lastTopic = 'workmanship';
+        return 'السبائك والجنيهات بتكون مصنعيتها أقل مقارنة بالمشغولات وبيتم استرداد جزء من المصنعية أحياناً حسب الشروط، بينما المشغولات بيكون فيها مصنعية أعلى وتصميم.';
+      }
+
+      if (/ليه|ازاي|كيف|وضح|اكتر|أكتر/.test(clean) && lastTopic) {
+        if (lastTopic === 'reliability') {
+          return 'عشان تعرض سعر حي متغير لوحده من غير تدخل، لازم يكون في مصدر بيانات خارجي (API) بيرجع الأسعار الحية وبيكون متوصل في الكود؛ غير كده الكود بيعرض القيم المخزنة فيه.';
+        }
+        if (lastTopic === 'market_trend') {
+          return 'لو هدفك ادخار طويل المدى فالأفضل تقسيم الشراء على فترات بدل الشراء بكامل المبلغ في نقطة واحدة، أما لو هدفك قصير المدى فالفارق بين سعر الشراء والبيع والمصنعية مهم جداً تحسبه.';
+        }
+      }
+
+      lastTopic = 'general';
+      return `فهمت سؤالك بخصوص "${escapeHtml(rawText.trim())}". لو تقصد حاجة محددة في الأسعار أو السوق قولّي بالظبط، ولو معلومة جديدة حابب أعتمدها اكتبلي: <b>علّم: السؤال = الإجابة</b>.`;
     }
 
     function sendMessage() {
@@ -430,10 +544,11 @@
       if (!text) return;
 
       const chatBox = document.getElementById('chat-box');
-      chatBox.innerHTML += `<div class="msg user-msg">${text}</div>`;
+      chatBox.innerHTML += `<div class="msg user-msg">${escapeHtml(text)}</div>`;
       input.value = '';
 
       const reply = generateSmartReply(text);
+      lastBotMessage = reply;
       chatBox.innerHTML += `<div class="msg bot-msg">${reply}</div>`;
       chatBox.scrollTop = chatBox.scrollHeight;
     }

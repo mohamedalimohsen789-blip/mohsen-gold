@@ -43,7 +43,7 @@
     }
     .container {
       padding: 14px;
-      max-width: 760px;
+      max-width: 780px;
       margin: auto;
     }
     .page { display: none; }
@@ -76,10 +76,10 @@
     .down { color: #ff5252; font-weight: bold; }
 
     .chart-box {
-      background-color: #1a1a1a;
-      border: 1px solid #2c2c2c;
+      background-color: #181818;
+      border: 1px solid #2b2b2b;
       border-radius: 14px;
-      padding: 14px;
+      padding: 12px;
       margin-bottom: 14px;
     }
     .chart-header {
@@ -87,19 +87,19 @@
       flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
+      gap: 8px;
+      margin-bottom: 10px;
     }
     .asset-pills, .range-pills, .side-pills {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 5px;
     }
     .pill-btn {
-      padding: 7px 11px;
+      padding: 6px 10px;
       border-radius: 8px;
       border: 1px solid #333;
-      background-color: #242424;
+      background-color: #232323;
       color: #ddd;
       font-size: 12px;
       font-weight: bold;
@@ -110,38 +110,61 @@
       color: #000;
       border-color: #00e676;
     }
-    .chart-summary {
-      background-color: #141414;
-      border: 1px solid #282828;
+    .ohlc-bar {
+      background-color: #111111;
+      border: 1px solid #262626;
       border-radius: 10px;
-      padding: 10px 12px;
-      margin-bottom: 12px;
+      padding: 9px 11px;
+      margin-bottom: 10px;
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
       gap: 8px;
-      font-size: 13px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .ohlc-values {
+      direction: ltr;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-family: monospace;
+      font-size: 12px;
     }
     .chart-stage {
       display: flex;
       align-items: stretch;
-      gap: 8px;
+      gap: 6px;
     }
     .y-axis {
-      width: 78px;
+      width: 76px;
+      height: 310px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       font-size: 11px;
-      color: #b0b0b0;
+      font-family: monospace;
+      color: #bdbdbd;
       text-align: left;
       direction: ltr;
-      padding: 4px 0;
+      padding: 6px 2px;
+      background-color: #121212;
+      border: 1px solid #242424;
+      border-radius: 8px;
       user-select: none;
+    }
+    .y-axis span {
+      display: block;
+      border-bottom: 1px dashed #222;
+      padding-bottom: 1px;
+    }
+    .y-axis span:last-child {
+      border-bottom: none;
     }
     .canvas-wrap {
       flex: 1;
-      background-color: #111111;
+      height: 310px;
+      background-color: #0e0e0e;
       border: 1px solid #262626;
       border-radius: 10px;
       overflow: hidden;
@@ -150,28 +173,31 @@
     canvas#gold-map-canvas {
       display: block;
       width: 100%;
-      height: 250px;
+      height: 310px;
       touch-action: none;
-      cursor: ew-resize;
+      cursor: grab;
     }
-    .scrubber-row {
-      margin-top: 12px;
-      background-color: #161616;
-      border: 1px solid #282828;
-      border-radius: 10px;
-      padding: 10px 12px;
+    canvas#gold-map-canvas:active {
+      cursor: grabbing;
     }
-    .scrubber-top {
+    .chart-footer-bar {
+      margin-top: 10px;
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
       font-size: 12px;
-      color: #cfcfcf;
-      margin-bottom: 8px;
+      color: #bdbdbd;
     }
-    input[type="range"].time-slider {
-      width: 100%;
-      accent-color: #00e676;
+    .jump-btn {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid #00e676;
+      background-color: #102a21;
+      color: #00e676;
+      font-size: 12px;
+      font-weight: bold;
       cursor: pointer;
     }
 
@@ -219,7 +245,7 @@
     .input-row {
       display: flex;
       gap: 8px;
-      max-width: 720px;
+      max-width: 780px;
       margin: auto;
     }
     input[type="text"].chat-input {
@@ -274,7 +300,7 @@
       </div>
     </div>
 
-    <!-- صفحة خريطة الذهب -->
+    <!-- صفحة خريطة الذهب (الشموع اليابانية) -->
     <div id="page-map" class="page">
       <div class="chart-box">
         <div class="chart-header">
@@ -292,33 +318,33 @@
 
         <div class="chart-header">
           <div class="range-pills">
-            <button id="range-1d" class="pill-btn active" onclick="setMapRange('1d')">يوم</button>
-            <button id="range-1y" class="pill-btn" onclick="setMapRange('1y')">سنة</button>
-            <button id="range-5y" class="pill-btn" onclick="setMapRange('5y')">5 سنوات</button>
-            <button id="range-all" class="pill-btn" onclick="setMapRange('all')">الكل</button>
+            <button id="tf-1m" class="pill-btn active" onclick="setMapTimeframe('1m')">1د</button>
+            <button id="tf-4m" class="pill-btn" onclick="setMapTimeframe('4m')">4د</button>
+            <button id="tf-15m" class="pill-btn" onclick="setMapTimeframe('15m')">15د</button>
+            <button id="tf-30m" class="pill-btn" onclick="setMapTimeframe('30m')">30د</button>
+            <button id="tf-1h" class="pill-btn" onclick="setMapTimeframe('1h')">1س</button>
+            <button id="tf-4h" class="pill-btn" onclick="setMapTimeframe('4h')">4س</button>
+            <button id="tf-1d" class="pill-btn" onclick="setMapTimeframe('1d')">يوم</button>
           </div>
-          <div id="map-trend-badge" class="up">الاتجاه: ---</div>
+          <div id="map-tf-badge" style="font-size:12px; color:#ffd54f; font-weight:bold;">كل شمعة = 1 دقيقة</div>
         </div>
 
-        <div class="chart-summary">
+        <div class="ohlc-bar">
           <div>
-            <span style="color:#aaa;">السعر الحالي الموثوق:</span>
-            <b id="map-current-price" style="color:#ffd54f;">---</b>
+            <span style="color:#9e9e9e;">الشمعة:</span>
+            <b id="candle-time-label" style="color:#ffd54f;">---</b>
+            <span id="candle-dir-label" class="up" style="margin-right:6px;">---</span>
           </div>
-          <div>
-            <span style="color:#aaa;">النقطة المحددة:</span>
-            <b id="map-selected-price" style="color:#00e676;">---</b>
-          </div>
-          <div>
-            <span style="color:#aaa;">الوقت / التاريخ:</span>
-            <b id="map-selected-time">---</b>
+          <div class="ohlc-values">
+            <span>O: <b id="ohlc-o">---</b></span>
+            <span>H: <b id="ohlc-h">---</b></span>
+            <span>L: <b id="ohlc-l">---</b></span>
+            <span>C: <b id="ohlc-c">---</b></span>
           </div>
         </div>
 
         <div class="chart-stage">
           <div id="map-y-axis" class="y-axis">
-            <span>---</span>
-            <span>---</span>
             <span>---</span>
           </div>
           <div class="canvas-wrap">
@@ -326,17 +352,14 @@
           </div>
         </div>
 
-        <div class="scrubber-row">
-          <div class="scrubber-top">
-            <span>اسحب المؤشر أو المس الخريطة يمين/شمال لمعرفة سعر الماضي:</span>
-            <span id="map-delta-label">الفرق: ---</span>
-          </div>
-          <input id="map-scrubber" class="time-slider" type="range" min="0" max="29" value="29" oninput="onScrubberChange(this.value)" />
+        <div class="chart-footer-bar">
+          <span id="candle-count-label">اسحب الشاشة للخلف لعرض شموع سابقة بلا حدود</span>
+          <button class="jump-btn" onclick="jumpToLatestCandle()">الرجوع للشمعة الحالية</button>
         </div>
       </div>
 
       <div class="note">
-        الأسعار الحالية هي القيم الموثوقة المعتمدة في التطبيق (ويمكن ربط مصدر خارجي عبر <code>CUSTOM_API_URL</code>). المنحنى الزمني السابق وميزة السحب يعرضان حركة تقديرية توضيحية مبنية على السعر المرجعي الحالي وليسا أرشيف بورصة لحظياً مباشراً.
+        السعر الحالي في آخر شمعة مربوط بالسعر الموثوق في التطبيق (أو <code>CUSTOM_API_URL</code>). الشموع السابقة مولّدة كمحاكاة بصرية منتظمة حول السعر المرجعي ما لم يتم ربط مصدر بيانات شموع خارجي.
       </div>
     </div>
 
@@ -367,15 +390,25 @@
     const GEMINI_MODEL = 'gemini-2.5-flash';
 
     const CUSTOM_API_URL = '';
-    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v13';
-    const MOVE_STORAGE_KEY = 'gold_last_move_v13';
-    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v13';
+    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v14';
+    const MOVE_STORAGE_KEY = 'gold_last_move_v14';
+    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v14';
 
     const ASSET_LABELS = {
       k21: 'عيار 21',
       k24: 'عيار 24',
       k18: 'عيار 18',
       pound: 'الجنيه الذهب'
+    };
+
+    const TIMEFRAME_CONFIG = {
+      '1m':  { label: '1د',   desc: 'كل شمعة = 1 دقيقة',  minutes: 1,    volRatio: 0.0014 },
+      '4m':  { label: '4د',   desc: 'كل شمعة = 4 دقائق',  minutes: 4,    volRatio: 0.0024 },
+      '15m': { label: '15د',  desc: 'كل شمعة = 15 دقيقة', minutes: 15,   volRatio: 0.0042 },
+      '30m': { label: '30د',  desc: 'كل شمعة = 30 دقيقة', minutes: 30,   volRatio: 0.0060 },
+      '1h':  { label: '1س',   desc: 'كل شمعة = 1 ساعة',   minutes: 60,   volRatio: 0.0085 },
+      '4h':  { label: '4س',   desc: 'كل شمعة = 4 ساعات',  minutes: 240,  volRatio: 0.0150 },
+      '1d':  { label: 'يوم',  desc: 'كل شمعة = 1 يوم',    minutes: 1440, volRatio: 0.0260 }
     };
 
     const STOP_WORDS = new Set([
@@ -391,7 +424,7 @@
       'مصنعيه', 'اوقيه', 'اونصه', 'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور',
       'اسمي', 'انسى', 'امسح', 'هتزيد', 'تزيد', 'هتنزل', 'تنزل', 'تقل', 'يقل', 'اخر',
       'مره', 'مرا', 'رايك', 'رأيك', 'غالي', 'رخيص', 'حلوه', 'مناسب', 'ارتفع', 'نزل',
-      'خريطه', 'خريطة', 'شارت', 'رسم'
+      'خريطه', 'خريطة', 'شارت', 'شموع', 'شمعه'
     ];
 
     const GREETING_WORDS = new Set([
@@ -406,12 +439,19 @@
     let isSending = false;
     let memoryStore = loadMemoryStore();
 
+    // حالة خريطة الشموع اليابانية
     let mapAsset = 'k21';
     let mapSide = 'buy';
-    let mapRange = '1d';
-    let mapSeries = [];
-    let selectedMapIndex = 0;
-    let isDraggingMap = false;
+    let mapTimeframe = '1m';
+    let candles = []; // مرتبة من الأقدم (index 0) إلى الأحدث (index length - 1)
+    let baseAnchorTimeMs = Date.now();
+    let viewRightIndex = 0; // فهرس آخر شمعة ظاهرة على اليمين
+    let visibleCandleCount = 34;
+    let selectedCandleIndex = 0;
+    let isPanningCandles = false;
+    let panStartX = 0;
+    let panStartRightIndex = 0;
+    let panMoved = false;
 
     function cloneGoldData(data) {
       return {
@@ -575,7 +615,8 @@
 
       window.scrollTo({ top: 0, behavior: 'instant' });
       if (tab === 'map') {
-        rebuildMapSeries(false);
+        if (!candles.length) initCandlesChart();
+        else renderCandlesChart();
       }
     }
 
@@ -584,6 +625,13 @@
         minimumFractionDigits: Number(num) % 1 === 0 ? 0 : 2,
         maximumFractionDigits: 2
       }) + ' EGP';
+    }
+
+    function formatShortPrice(num) {
+      return Number(num).toLocaleString('en-US', {
+        minimumFractionDigits: num >= 10000 ? 0 : 2,
+        maximumFractionDigits: num >= 10000 ? 0 : 2
+      });
     }
 
     function applyDirectionClass(elId, oldVal, newVal, defaultClass) {
@@ -595,52 +643,90 @@
       else if (defaultClass) el.classList.add(defaultClass);
     }
 
-    function buildIllustrativeSeries(latestPrice, rangeKey, assetKey, sideKey) {
-      const config = {
-        '1d': { points: 24, swingRatio: 0.012, pastDrift: -0.008, unit: 'hours' },
-        '1y': { points: 30, swingRatio: 0.08, pastDrift: -0.18, unit: 'days' },
-        '5y': { points: 30, swingRatio: 0.16, pastDrift: -0.45, unit: 'months' },
-        'all': { points: 30, swingRatio: 0.22, pastDrift: -0.62, unit: 'months' }
-      }[rangeKey] || { points: 30, swingRatio: 0.08, pastDrift: -0.18, unit: 'days' };
+    // توليد شمعة سابقة بناءً على سعر الإغلاق بتاعها وفهرس خطوتها للخلف
+    function generateOlderCandle(stepBack, nextClosePrice) {
+      const cfg = TIMEFRAME_CONFIG[mapTimeframe];
+      const seed = (stepBack * 131 + mapAsset.charCodeAt(0) * 17 + mapSide.charCodeAt(0) * 7 + cfg.minutes) % 997;
+      const waveA = Math.sin(seed * 0.37);
+      const waveB = Math.cos(seed * 0.19);
+      const bodyPct = (waveA * 0.65 + waveB * 0.35) * cfg.volRatio;
 
-      const seedOffset = (assetKey.charCodeAt(0) * 7 + sideKey.charCodeAt(0) * 3) % 11;
-      const now = new Date();
-      const series = [];
+      const close = Number(nextClosePrice);
+      const open = Number(Math.max(10, close / (1 + bodyPct)).toFixed(2));
+      const wickUpPct = (0.2 + Math.abs(Math.sin(seed * 0.71)) * 0.8) * cfg.volRatio * 0.7;
+      const wickDownPct = (0.2 + Math.abs(Math.cos(seed * 0.53)) * 0.8) * cfg.volRatio * 0.7;
 
-      for (let i = 0; i < config.points; i++) {
-        const progress = i / (config.points - 1); // 0 = أقدم نقطة, 1 = الآن
-        const remaining = 1 - progress;
-        const wave = Math.sin((i + seedOffset) * 0.72) * 0.6 + Math.cos((i + seedOffset) * 0.31) * 0.4;
-        const pastFactor = 1 + config.pastDrift * Math.pow(remaining, 1.15) + wave * config.swingRatio * remaining;
-        const price = i === config.points - 1
-          ? Number(latestPrice)
-          : Number((latestPrice * Math.max(0.25, pastFactor)).toFixed(2));
+      const high = Number((Math.max(open, close) * (1 + wickUpPct)).toFixed(2));
+      const low = Number(Math.max(10, Math.min(open, close) * (1 - wickDownPct)).toFixed(2));
 
-        const labelDate = new Date(now.getTime());
-        if (rangeKey === '1d') {
-          const hoursBack = (config.points - 1 - i);
-          labelDate.setHours(labelDate.getHours() - hoursBack);
-          const timeStr = labelDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-          series.push({ label: i === config.points - 1 ? 'الآن' : timeStr, price });
-        } else if (rangeKey === '1y') {
-          const daysBack = Math.round(((config.points - 1 - i) / (config.points - 1)) * 365);
-          labelDate.setDate(labelDate.getDate() - daysBack);
-          const dateStr = labelDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-          series.push({ label: i === config.points - 1 ? 'الآن' : dateStr, price });
-        } else if (rangeKey === '5y') {
-          const monthsBack = Math.round(((config.points - 1 - i) / (config.points - 1)) * 60);
-          labelDate.setMonth(labelDate.getMonth() - monthsBack);
-          const dateStr = labelDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-          series.push({ label: i === config.points - 1 ? 'الآن' : dateStr, price });
-        } else {
-          const monthsBack = Math.round(((config.points - 1 - i) / (config.points - 1)) * 120);
-          labelDate.setMonth(labelDate.getMonth() - monthsBack);
-          const dateStr = labelDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-          series.push({ label: i === config.points - 1 ? 'الآن' : dateStr, price });
-        }
+      const candleTimeMs = baseAnchorTimeMs - stepBack * cfg.minutes * 60 * 1000;
+      return {
+        stepBack,
+        timeMs: candleTimeMs,
+        open,
+        high,
+        low,
+        close
+      };
+    }
+
+    function formatCandleTimestamp(timeMs, stepBack) {
+      if (stepBack === 0) return 'الآن (الحالية)';
+      const d = new Date(timeMs);
+      if (mapTimeframe === '1d') {
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
       }
+      const datePart = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart} - ${timePart}`;
+    }
 
-      return series;
+    function prependHistoricalCandles(countToAdd) {
+      if (!candles.length) return;
+      for (let i = 0; i < countToAdd; i++) {
+        const oldest = candles[0];
+        const nextStepBack = oldest.stepBack + 1;
+        const olderCandle = generateOlderCandle(nextStepBack, oldest.open);
+        candles.unshift(olderCandle);
+        viewRightIndex += 1;
+        selectedCandleIndex += 1;
+      }
+    }
+
+    function initCandlesChart() {
+      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
+      baseAnchorTimeMs = Date.now();
+      candles = [];
+
+      // الشمعة الحالية (stepBack = 0)
+      const currentCandle = generateOlderCandle(0, latestPrice);
+      currentCandle.close = latestPrice;
+      currentCandle.high = Number(Math.max(currentCandle.high, latestPrice).toFixed(2));
+      currentCandle.low = Number(Math.min(currentCandle.low, latestPrice).toFixed(2));
+      candles.push(currentCandle);
+
+      // توليد 90 شمعة أولية للخلف، ومع السحب شمال/يمين تتولد شموع بلا حدود
+      prependHistoricalCandles(90);
+
+      viewRightIndex = candles.length - 1;
+      selectedCandleIndex = candles.length - 1;
+
+      const badge = document.getElementById('map-tf-badge');
+      if (badge) badge.textContent = TIMEFRAME_CONFIG[mapTimeframe].desc;
+
+      renderCandlesChart();
+    }
+
+    function syncLatestCandleWithAppPrice() {
+      if (!candles.length) return;
+      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
+      const last = candles[candles.length - 1];
+      last.close = latestPrice;
+      last.high = Number(Math.max(last.high, latestPrice).toFixed(2));
+      last.low = Number(Math.min(last.low, latestPrice).toFixed(2));
+      if (document.getElementById('page-map').classList.contains('active')) {
+        renderCandlesChart();
+      }
     }
 
     function setMapAsset(asset) {
@@ -648,103 +734,103 @@
       ['k21', 'k24', 'k18', 'pound'].forEach((k) => {
         document.getElementById(`asset-${k}`).classList.toggle('active', k === asset);
       });
-      rebuildMapSeries(true);
+      initCandlesChart();
     }
 
     function setMapSide(side) {
       mapSide = side;
       document.getElementById('side-buy').classList.toggle('active', side === 'buy');
       document.getElementById('side-sell').classList.toggle('active', side === 'sell');
-      rebuildMapSeries(true);
+      initCandlesChart();
     }
 
-    function setMapRange(range) {
-      mapRange = range;
-      ['1d', '1y', '5y', 'all'].forEach((r) => {
-        document.getElementById(`range-${r}`).classList.toggle('active', r === range);
+    function setMapTimeframe(tf) {
+      mapTimeframe = tf;
+      ['1m', '4m', '15m', '30m', '1h', '4h', '1d'].forEach((k) => {
+        document.getElementById(`tf-${k}`).classList.toggle('active', k === tf);
       });
-      rebuildMapSeries(true);
+      initCandlesChart();
     }
 
-    function rebuildMapSeries(resetToLatest) {
-      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
-      mapSeries = buildIllustrativeSeries(latestPrice, mapRange, mapAsset, mapSide);
-
-      const slider = document.getElementById('map-scrubber');
-      if (slider) {
-        slider.max = String(Math.max(0, mapSeries.length - 1));
-        if (resetToLatest || selectedMapIndex >= mapSeries.length) {
-          selectedMapIndex = mapSeries.length - 1;
-        }
-        slider.value = String(selectedMapIndex);
-      }
-      updateMapUI();
+    function jumpToLatestCandle() {
+      if (!candles.length) return;
+      viewRightIndex = candles.length - 1;
+      selectedCandleIndex = candles.length - 1;
+      renderCandlesChart();
     }
 
-    function onScrubberChange(val) {
-      const idx = Math.max(0, Math.min(mapSeries.length - 1, Number(val) || 0));
-      selectedMapIndex = idx;
-      updateMapUI();
-    }
+    function renderCandlesChart() {
+      if (!candles.length) return;
 
-    function updateMapUI() {
-      if (!mapSeries.length) return;
-      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
-      const firstPrice = mapSeries[0].price;
-      const overallDiff = latestPrice - firstPrice;
-      const isUp = overallDiff >= 0;
-
-      const trendEl = document.getElementById('map-trend-badge');
-      if (trendEl) {
-        trendEl.classList.remove('up', 'down');
-        trendEl.classList.add(isUp ? 'up' : 'down');
-        const pct = firstPrice > 0 ? ((overallDiff / firstPrice) * 100).toFixed(1) : '0.0';
-        trendEl.textContent = isUp
-          ? `الاتجاه: صاعد (+${formatEGP(Math.abs(overallDiff))} | +${pct}%)`
-          : `الاتجاه: هابط (-${formatEGP(Math.abs(overallDiff))} | ${pct}%)`;
+      // ضمان توليد شموع إضافية تلقائياً كل ما المستخدم يسحب ناحية الماضي (الشمال)
+      if (viewRightIndex - visibleCandleCount < 20) {
+        prependHistoricalCandles(50);
       }
 
-      const curEl = document.getElementById('map-current-price');
-      if (curEl) {
-        curEl.textContent = `${ASSET_LABELS[mapAsset]} (${mapSide.toUpperCase()}): ${formatEGP(latestPrice)}`;
+      const endIdx = Math.max(visibleCandleCount - 1, Math.min(candles.length - 1, Math.round(viewRightIndex)));
+      const startIdx = Math.max(0, endIdx - visibleCandleCount + 1);
+      const slice = candles.slice(startIdx, endIdx + 1);
+
+      if (selectedCandleIndex < startIdx || selectedCandleIndex > endIdx) {
+        selectedCandleIndex = endIdx;
       }
 
-      const pt = mapSeries[selectedMapIndex] || mapSeries[mapSeries.length - 1];
-      const selPriceEl = document.getElementById('map-selected-price');
-      const selTimeEl = document.getElementById('map-selected-time');
-      const deltaEl = document.getElementById('map-delta-label');
-
-      if (selPriceEl) selPriceEl.textContent = formatEGP(pt.price);
-      if (selTimeEl) selTimeEl.textContent = pt.label;
-
-      if (deltaEl) {
-        const diffFromSelected = latestPrice - pt.price;
-        const sign = diffFromSelected >= 0 ? '+' : '-';
-        deltaEl.textContent = `الفرق عن الآن: ${sign}${formatEGP(Math.abs(diffFromSelected))}`;
+      // حساب أعلى وأقل سعر في الشموع الظاهرة فقط عشان الأرقام على الجنب تتغير ديناميكياً مع السحب
+      let rawMin = Infinity;
+      let rawMax = -Infinity;
+      for (const c of slice) {
+        if (c.low < rawMin) rawMin = c.low;
+        if (c.high > rawMax) rawMax = c.high;
       }
+      const rawSpan = Math.max(0.5, rawMax - rawMin);
+      const minPrice = rawMin - rawSpan * 0.08;
+      const maxPrice = rawMax + rawSpan * 0.08;
+      const totalSpan = Math.max(0.5, maxPrice - minPrice);
 
-      const prices = mapSeries.map((p) => p.price);
-      const minP = Math.min(...prices);
-      const maxP = Math.max(...prices);
-      const midP = (minP + maxP) / 2;
-
+      // تحديث الأرقام الكثيرة على الجنب (9 مستويات متدرجة تتغير مع حركة الشاشة)
       const yAxisEl = document.getElementById('map-y-axis');
       if (yAxisEl) {
-        yAxisEl.innerHTML =
-          `<span>${Math.round(maxP).toLocaleString('en-US')}</span>` +
-          `<span>${Math.round(midP).toLocaleString('en-US')}</span>` +
-          `<span>${Math.round(minP).toLocaleString('en-US')}</span>`;
+        const ticksCount = 9;
+        const spans = [];
+        for (let t = 0; t < ticksCount; t++) {
+          const val = maxPrice - (t / (ticksCount - 1)) * totalSpan;
+          spans.push(`<span>${formatShortPrice(val)}</span>`);
+        }
+        yAxisEl.innerHTML = spans.join('');
       }
 
-      drawGoldMapCanvas(minP, maxP);
-    }
+      // تحديث شريط بيانات الشمعة المحددة (Open / High / Low / Close)
+      const selCandle = candles[selectedCandleIndex] || candles[endIdx];
+      const isBull = selCandle.close >= selCandle.open;
+      const diff = selCandle.close - selCandle.open;
 
-    function drawGoldMapCanvas(minP, maxP) {
+      const timeEl = document.getElementById('candle-time-label');
+      const dirEl = document.getElementById('candle-dir-label');
+      if (timeEl) timeEl.textContent = formatCandleTimestamp(selCandle.timeMs, selCandle.stepBack);
+      if (dirEl) {
+        dirEl.classList.remove('up', 'down');
+        dirEl.classList.add(isBull ? 'up' : 'down');
+        dirEl.textContent = isBull
+          ? `صعود (+${formatShortPrice(Math.abs(diff))})`
+          : `هبوط (-${formatShortPrice(Math.abs(diff))})`;
+      }
+
+      document.getElementById('ohlc-o').textContent = formatShortPrice(selCandle.open);
+      document.getElementById('ohlc-h').textContent = formatShortPrice(selCandle.high);
+      document.getElementById('ohlc-l').textContent = formatShortPrice(selCandle.low);
+      document.getElementById('ohlc-c').textContent = formatShortPrice(selCandle.close);
+
+      const countEl = document.getElementById('candle-count-label');
+      if (countEl) {
+        countEl.textContent = `شموع محمّلة: ${candles.length} شمعة | اسحب للماضي بلا حدود`;
+      }
+
+      // رسم الشموع على الـ Canvas
       const canvas = document.getElementById('gold-map-canvas');
-      if (!canvas || !mapSeries.length) return;
+      if (!canvas) return;
       const wrap = canvas.parentElement;
       const width = Math.max(220, wrap.clientWidth || 560);
-      const height = 250;
+      const height = 310;
       const dpr = window.devicePixelRatio || 1;
 
       canvas.width = width * dpr;
@@ -754,85 +840,101 @@
       ctx.scale(dpr, dpr);
       ctx.clearRect(0, 0, width, height);
 
-      const padX = 14;
-      const padY = 20;
-      const plotW = Math.max(10, width - padX * 2);
-      const plotH = Math.max(10, height - padY * 2);
-      const span = Math.max(1, maxP - minP);
+      const padLeft = 10;
+      const padRight = 10;
+      const padTop = 14;
+      const padBottom = 26;
+      const plotW = Math.max(20, width - padLeft - padRight);
+      const plotH = Math.max(20, height - padTop - padBottom);
 
-      // خطوط شبكة أفقية خفيفة
-      ctx.strokeStyle = '#222222';
+      const priceToY = (p) => padTop + plotH - ((p - minPrice) / totalSpan) * plotH;
+
+      // رسم شبكة أفقية مطابقة لمستويات الأرقام على الجنب
+      ctx.strokeStyle = '#1d1d1d';
       ctx.lineWidth = 1;
-      for (let g = 0; g <= 2; g++) {
-        const gy = padY + (plotH * g) / 2;
+      for (let g = 0; g < 9; g++) {
+        const gy = padTop + (g / 8) * plotH;
         ctx.beginPath();
-        ctx.moveTo(padX, gy);
-        ctx.lineTo(padX + plotW, gy);
+        ctx.moveTo(padLeft, gy);
+        ctx.lineTo(padLeft + plotW, gy);
         ctx.stroke();
       }
 
-      const coords = mapSeries.map((pt, idx) => {
-        const x = padX + (idx / Math.max(1, mapSeries.length - 1)) * plotW;
-        const y = padY + plotH - ((pt.price - minP) / span) * plotH;
-        return { x, y, pt };
+      const stepW = plotW / slice.length;
+      const bodyW = Math.max(4, Math.min(18, stepW * 0.64));
+
+      slice.forEach((c, i) => {
+        const globalIdx = startIdx + i;
+        const centerX = padLeft + i * stepW + stepW / 2;
+        const bull = c.close >= c.open;
+        const color = bull ? '#00e676' : '#ff5252';
+
+        const yHigh = priceToY(c.high);
+        const yLow = priceToY(c.low);
+        const yOpen = priceToY(c.open);
+        const yClose = priceToY(c.close);
+
+        // خلفية خفيفة للشمعة المحددة
+        if (globalIdx === selectedCandleIndex) {
+          ctx.fillStyle = 'rgba(255, 213, 79, 0.10)';
+          ctx.fillRect(centerX - stepW / 2, padTop, stepW, plotH);
+        }
+
+        // الفتيل العلوي والسفلي (High - Low)
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(centerX, yHigh);
+        ctx.lineTo(centerX, yLow);
+        ctx.stroke();
+
+        // جسم الشمعة (Open - Close)
+        const topY = Math.min(yOpen, yClose);
+        const bodyH = Math.max(2, Math.abs(yClose - yOpen));
+        ctx.fillStyle = color;
+        ctx.fillRect(centerX - bodyW / 2, topY, bodyW, bodyH);
+
+        // كتابة الوقت على المحور السفلي كل عدة شموع
+        if (i % 7 === 0 || i === slice.length - 1) {
+          const d = new Date(c.timeMs);
+          const shortTime = mapTimeframe === '1d'
+            ? d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })
+            : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+          ctx.fillStyle = '#888888';
+          ctx.font = '10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(shortTime, centerX, height - 8);
+        }
       });
 
-      const latestPrice = Number(currentGoldData[mapAsset][mapSide]);
-      const isUp = latestPrice >= mapSeries[0].price;
-      const strokeColor = isUp ? '#00e676' : '#ff5252';
-      const fillColor = isUp ? 'rgba(0, 230, 118, 0.14)' : 'rgba(255, 82, 82, 0.14)';
-
-      // تعبئة أسفل المنحنى
-      ctx.beginPath();
-      ctx.moveTo(coords[0].x, padY + plotH);
-      coords.forEach((c) => ctx.lineTo(c.x, c.y));
-      ctx.lineTo(coords[coords.length - 1].x, padY + plotH);
-      ctx.closePath();
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-
-      // خط المنحنى الرئيسي
-      ctx.beginPath();
-      coords.forEach((c, idx) => {
-        if (idx === 0) ctx.moveTo(c.x, c.y);
-        else ctx.lineTo(c.x, c.y);
-      });
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-
-      // خط المؤشر العمودي ونقطة السحب المحددة
-      const sel = coords[selectedMapIndex] || coords[coords.length - 1];
+      // خط أفقي متقطع عند سعر إغلاق الشمعة المحددة
+      const selY = priceToY(selCandle.close);
       ctx.strokeStyle = '#ffd54f';
       ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(sel.x, padY);
-      ctx.lineTo(sel.x, padY + plotH);
+      ctx.moveTo(padLeft, selY);
+      ctx.lineTo(padLeft + plotW, selY);
       ctx.stroke();
       ctx.setLineDash([]);
-
-      ctx.beginPath();
-      ctx.arc(sel.x, sel.y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = '#ffd54f';
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#111111';
-      ctx.stroke();
     }
 
-    function selectIndexFromClientX(clientX) {
+    function selectCandleAtClientX(clientX) {
       const canvas = document.getElementById('gold-map-canvas');
-      if (!canvas || !mapSeries.length) return;
+      if (!canvas || !candles.length) return;
       const rect = canvas.getBoundingClientRect();
-      const padX = 14;
-      const plotW = Math.max(10, rect.width - padX * 2);
-      const relX = Math.max(0, Math.min(plotW, clientX - rect.left - padX));
-      const ratio = relX / plotW;
-      const idx = Math.round(ratio * (mapSeries.length - 1));
-      selectedMapIndex = Math.max(0, Math.min(mapSeries.length - 1, idx));
-      const slider = document.getElementById('map-scrubber');
-      if (slider) slider.value = String(selectedMapIndex);
-      updateMapUI();
+      const padLeft = 10;
+      const padRight = 10;
+      const plotW = Math.max(20, rect.width - padLeft - padRight);
+      const relX = Math.max(0, Math.min(plotW - 1, clientX - rect.left - padLeft));
+
+      const endIdx = Math.max(visibleCandleCount - 1, Math.min(candles.length - 1, Math.round(viewRightIndex)));
+      const startIdx = Math.max(0, endIdx - visibleCandleCount + 1);
+      const count = endIdx - startIdx + 1;
+      const localIdx = Math.min(count - 1, Math.max(0, Math.floor((relX / plotW) * count)));
+
+      selectedCandleIndex = startIdx + localIdx;
+      renderCandlesChart();
     }
 
     function bindMapInteractions() {
@@ -840,24 +942,42 @@
       if (!canvas) return;
 
       canvas.addEventListener('pointerdown', (e) => {
-        isDraggingMap = true;
+        isPanningCandles = true;
+        panMoved = false;
+        panStartX = e.clientX;
+        panStartRightIndex = viewRightIndex;
         canvas.setPointerCapture(e.pointerId);
-        selectIndexFromClientX(e.clientX);
       });
 
       canvas.addEventListener('pointermove', (e) => {
-        if (!isDraggingMap) return;
-        selectIndexFromClientX(e.clientX);
+        if (!isPanningCandles) return;
+        const dx = e.clientX - panStartX;
+        if (Math.abs(dx) > 4) panMoved = true;
+
+        const rect = canvas.getBoundingClientRect();
+        const stepPx = Math.max(6, (rect.width - 20) / visibleCandleCount);
+        const shiftCandles = dx / stepPx;
+
+        // السحب ناحية اليمين أو الشمال يحرك الشموع بسلاسة، وعند الرجوع للماضي يزيد الشموع بلا حدود
+        let nextRight = panStartRightIndex - shiftCandles;
+        if (nextRight > candles.length - 1) {
+          nextRight = candles.length - 1;
+        }
+        viewRightIndex = nextRight;
+        renderCandlesChart();
       });
 
       canvas.addEventListener('pointerup', (e) => {
-        isDraggingMap = false;
+        if (!panMoved) {
+          selectCandleAtClientX(e.clientX);
+        }
+        isPanningCandles = false;
         try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
       });
 
       window.addEventListener('resize', () => {
         if (document.getElementById('page-map').classList.contains('active')) {
-          updateMapUI();
+          renderCandlesChart();
         }
       });
     }
@@ -921,9 +1041,7 @@
         noteEl.textContent = `${currentGoldData.sourceLabel} | Checked every 30s | Last check: ${checkedAt}`;
       }
 
-      if (document.getElementById('page-map').classList.contains('active')) {
-        rebuildMapSeries(false);
-      }
+      syncLatestCandleWithAppPrice();
     }
 
     function normalizeText(str) {
@@ -1316,7 +1434,7 @@
 
     applySavedWelcomeName();
     bindMapInteractions();
-    rebuildMapSeries(true);
+    initCandlesChart();
     loadGoldPrices();
     setInterval(loadGoldPrices, 30000);
   </script>

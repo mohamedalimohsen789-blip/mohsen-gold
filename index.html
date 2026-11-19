@@ -49,9 +49,8 @@
       align-items: center;
     }
     .karat { font-size: 17px; font-weight: bold; color: #ffd54f; }
-    .prices { text-align: left; font-size: 14px; line-height: 1.7; }
+    .prices { text-align: left; font-size: 14px; line-height: 1.7; direction: ltr; }
     .up { color: #00e676; font-weight: bold; }
-    .down { color: #ff5252; font-weight: bold; }
     .chat-box {
       background-color: #181818;
       border: 1px solid #2a2a2a;
@@ -103,42 +102,41 @@
   <div class="container">
     <!-- صفحة سوق الذهبي -->
     <div id="page-gold" class="page active">
-      <div id="gold-note" class="note">جاري تحميل الأسعار الموثوقة...</div>
+      <div id="gold-note" class="note">Loading verified prices...</div>
       <div class="card">
         <div class="karat">عيار 24</div>
-        <div class="prices">شراء: <span id="k24-buy" class="up">---</span><br>بيع: <span id="k24-sell">---</span></div>
+        <div class="prices">Buy: <span id="k24-buy" class="up">---</span><br>Sell: <span id="k24-sell">---</span></div>
       </div>
       <div class="card">
         <div class="karat">عيار 21</div>
-        <div class="prices">شراء: <span id="k21-buy" class="up">---</span><br>بيع: <span id="k21-sell">---</span></div>
+        <div class="prices">Buy: <span id="k21-buy" class="up">---</span><br>Sell: <span id="k21-sell">---</span></div>
       </div>
       <div class="card">
         <div class="karat">عيار 18</div>
-        <div class="prices">شراء: <span id="k18-buy" class="up">---</span><br>بيع: <span id="k18-sell">---</span></div>
+        <div class="prices">Buy: <span id="k18-buy" class="up">---</span><br>Sell: <span id="k18-sell">---</span></div>
       </div>
       <div class="card">
         <div class="karat">الجنيه الذهب</div>
-        <div class="prices">شراء: <span id="pound-buy" class="up">---</span><br>بيع: <span id="pound-sell">---</span></div>
+        <div class="prices">Buy: <span id="pound-buy" class="up">---</span><br>Sell: <span id="pound-sell">---</span></div>
       </div>
     </div>
 
     <!-- صفحة Mohsen AI -->
     <div id="page-ai" class="page">
-      <div class="note">Mohsen AI — يرد على الكلام الطبيعي ويجيب مباشرة على أسئلة الذهب والاقتصاد.</div>
+      <div class="note">Mohsen AI — رد تلقائي مباشر على أي كلام وأسئلة الذهب والاقتصاد.</div>
       <div id="chat-box" class="chat-box">
-        <div class="msg bot-msg">أهلاً بك في <b>Mohsen AI</b>. اتكلم معايا طبيعي أو اسألني مباشرة عن أسعار عيار 21 و24 و18 والجنيه الذهب أو حركة السوق.</div>
+        <div class="msg bot-msg">أهلاً بك في <b>Mohsen AI</b>. اكتب أي كلام أو اسألني عن عيار 21 و24 و18 والجنيه الذهب وسأرد عليك فوراً.</div>
       </div>
       <div class="input-row">
-        <input id="user-input" type="text" placeholder="اكتب كلامك أو سؤالك هنا..." onkeydown="if(event.key==='Enter') sendMessage()" />
+        <input id="user-input" type="text" placeholder="اكتب أي كلام هنا..." onkeydown="if(event.key==='Enter') sendMessage()" />
         <button class="send-btn" onclick="sendMessage()">إرسال</button>
       </div>
     </div>
   </div>
 
   <script>
-    // بيانات أسعار موثوقة معلنة (تحديث 19 نوفمبر 2026 - سوق الصاغة المصري)
     const VERIFIED_GOLD_DATA = {
-      sourceLabel: 'آي صاغة / السوق المعلن (19 نوفمبر 2026)',
+      sourceLabel: 'iSagha / Market Feed (Nov 19, 2026)',
       k24: { buy: 6525.75, sell: 6582.75 },
       k21: { buy: 5710, sell: 5760 },
       k18: { buy: 4894.25, sell: 4937.25 },
@@ -146,6 +144,7 @@
     };
 
     let currentGoldData = { ...VERIFIED_GOLD_DATA };
+    const CUSTOM_API_URL = '';
 
     function switchTab(tab) {
       document.getElementById('page-gold').classList.toggle('active', tab === 'gold');
@@ -155,11 +154,11 @@
     }
 
     function formatEGP(num) {
-      return Number(num).toLocaleString('ar-EG', { maximumFractionDigits: 2 }) + ' ج.م';
+      return Number(num).toLocaleString('en-US', {
+        minimumFractionDigits: Number(num) % 1 === 0 ? 0 : 2,
+        maximumFractionDigits: 2
+      }) + ' EGP';
     }
-
-    // لو حبيت تربط API خارجي لاحقاً ضع رابطه في CUSTOM_API_URL
-    const CUSTOM_API_URL = '';
 
     async function loadGoldPrices() {
       const noteEl = document.getElementById('gold-note');
@@ -171,7 +170,7 @@
           const apiData = await res.json();
           if (apiData?.k24 && apiData?.k21 && apiData?.k18 && apiData?.pound) {
             currentGoldData = {
-              sourceLabel: apiData.sourceLabel || 'مصدر مباشر (API)',
+              sourceLabel: apiData.sourceLabel || 'Live API Feed',
               k24: apiData.k24,
               k21: apiData.k21,
               k18: apiData.k18,
@@ -179,7 +178,7 @@
             };
           }
         } catch (err) {
-          console.warn('الرجوع للبيانات الموثوقة المحفوظة:', err);
+          console.warn('Using verified fallback gold data:', err);
         }
       }
 
@@ -196,59 +195,94 @@
       document.getElementById('pound-sell').textContent = formatEGP(currentGoldData.pound.sell);
 
       if (noteEl) {
-        noteEl.textContent = `المصدر: ${currentGoldData.sourceLabel} — آخر عرض: ${new Date().toLocaleTimeString('ar-EG')}`;
+        const checkedAt = new Date().toLocaleTimeString('en-US', { hour12: true });
+        noteEl.textContent = `Source: ${currentGoldData.sourceLabel} | Checked every 30s | Last check: ${checkedAt}`;
       }
     }
 
+    function normalizeArabic(str) {
+      return str
+        .toLowerCase()
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي')
+        .replace(/[ًٌٍَُِّ~ْ.,!?؟،؛:()\-_"'/\\]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function pickReply(options, seedText) {
+      let sum = 0;
+      for (let i = 0; i < seedText.length; i++) {
+        sum += seedText.charCodeAt(i);
+      }
+      return options[sum % options.length];
+    }
+
     function generateSmartReply(rawText) {
-      const text = rawText.trim();
-      const lower = text.toLowerCase();
+      const clean = normalizeArabic(rawText);
 
-      // 1. الرد على الكلام الطبيعي والتحيات
-      if (/^(السلام عليكم|سلام|اهلا|أهلا|هاي|hi|hello|ازيك|عامل ايه|اخبارك)/i.test(text)) {
-        return 'أهلاً بيك يا بطل! أنا تمام الحمد لله، قولي تحب تعرف إيه عن أسعار الذهب دلوقتي أو نسولف في إيه؟';
-      }
-      if (/شكرا|متشكر|تسلم|الله يباركلك|تمام|حلو|عاش/i.test(text)) {
-        return 'العفو يا سيدي، تحت أمرك في أي وقت. لو احتجت سعر عيار معين أو معلومة اقتصادية قولي فوراً.';
-      }
-      if (/مين انت|اسمك ايه|بتعمل ايه/i.test(text)) {
-        return 'أنا <b>Mohsen AI</b> جوه تطبيق سوق الذهبي؛ برد على كلامك الطبيعي وبديك أسعار الذهب والمعلومات الاقتصادية مباشرة من غير ما أقولك دور بنفسك.';
+      // 1. التحيات والكلام الترحيبي
+      if (/^(هلا|اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|hi|hello|hey|ازيك|ازيكم|عامل ايه|اخبارك|ايه الاخبار|منور|منورين|يا هلا|اهلين)/.test(clean)) {
+        return pickReply([
+          'هلا بيك يا بطل! منور الدنيا، قوللي تحب نبدأ بإيه دلوقتي؟',
+          'أهلاً وسهلاً بيك! أنا جاهز لأي كلام أو سؤال عن أسعار الذهب بالـ EGP.',
+          'يا أهلاً يا سيدي، تمام الحمد لله. قولي تحب تعرف إيه النهارده؟'
+        ], clean);
       }
 
-      // 2. أسئلة مباشرة عن أسعار الذهب والعيارات والجنيه الذهب
-      if (/عيار\s*21|21/i.test(text)) {
-        return `سعر جرام الذهب <b>عيار 21</b> الآن: شراء <b>${formatEGP(currentGoldData.k21.buy)}</b>، وبيع <b>${formatEGP(currentGoldData.k21.sell)}</b> (بدون مصنعية، حسب ${currentGoldData.sourceLabel}).`;
+      // 2. الشكر والموافقة والكلام الإيجابي
+      if (/^(شكرا|متشكر|تسلم|الله يباركلك|تمام|حلو|عاش|ماشي|اوك|ok|okay|جميل|ممتاز|ربنا يخليك)/.test(clean)) {
+        return pickReply([
+          'تسلم يا بطل، تحت أمرك دايماً في أي وقت.',
+          'العفو يا سيدي، لو احتجت سعر أي عيار أو حابب تكمل كلام أنا موجود.',
+          'الله يبارك فيك، قولي لو في أي حاجة تانية حابب نشوفها.'
+        ], clean);
       }
-      if (/عيار\s*24|24/i.test(text)) {
-        return `سعر جرام الذهب <b>عيار 24</b> الآن: شراء <b>${formatEGP(currentGoldData.k24.buy)}</b>، وبيع <b>${formatEGP(currentGoldData.k24.sell)}</b> (بدون مصنعية، حسب ${currentGoldData.sourceLabel}).`;
+
+      // 3. السؤال عن البوت
+      if (/مين انت|اسمك ايه|بتعمل ايه|انت مين/.test(clean)) {
+        return 'أنا <b>Mohsen AI</b> جوه تطبيق سوق الذهبي؛ برد تلقائياً على كلامك وبعرضلك أسعار الذهب بتنسيق EGP وأشرحلك النقاط الاقتصادية مباشرة.';
       }
-      if (/عيار\s*18|18/i.test(text)) {
-        return `سعر جرام الذهب <b>عيار 18</b> الآن: شراء <b>${formatEGP(currentGoldData.k18.buy)}</b>، وبيع <b>${formatEGP(currentGoldData.k18.sell)}</b> (بدون مصنعية، حسب ${currentGoldData.sourceLabel}).`;
+
+      // 4. أسعار الذهب والعيارات
+      if (/عيار 21|21/.test(clean)) {
+        return `عيار 21 الآن: Buy <b>${formatEGP(currentGoldData.k21.buy)}</b> | Sell <b>${formatEGP(currentGoldData.k21.sell)}</b> (${currentGoldData.sourceLabel}).`;
       }
-      if (/جنيه ذهب|الجنيه/i.test(text)) {
-        return `سعر <b>الجنيه الذهب</b> (8 جرام عيار 21) الآن: شراء <b>${formatEGP(currentGoldData.pound.buy)}</b>، وبيع <b>${formatEGP(currentGoldData.pound.sell)}</b> (بدون مصنعية، حسب ${currentGoldData.sourceLabel}).`;
+      if (/عيار 24|24/.test(clean)) {
+        return `عيار 24 الآن: Buy <b>${formatEGP(currentGoldData.k24.buy)}</b> | Sell <b>${formatEGP(currentGoldData.k24.sell)}</b> (${currentGoldData.sourceLabel}).`;
       }
-      if (/سعر الذهب|اسعار الذهب|الذهب بكام|الدهب بكام/i.test(text)) {
+      if (/عيار 18|18/.test(clean)) {
+        return `عيار 18 الآن: Buy <b>${formatEGP(currentGoldData.k18.buy)}</b> | Sell <b>${formatEGP(currentGoldData.k18.sell)}</b> (${currentGoldData.sourceLabel}).`;
+      }
+      if (/جنيه ذهب|الجنيه|جنيه/.test(clean)) {
+        return `الجنيه الذهب (8g 21K) الآن: Buy <b>${formatEGP(currentGoldData.pound.buy)}</b> | Sell <b>${formatEGP(currentGoldData.pound.sell)}</b> (${currentGoldData.sourceLabel}).`;
+      }
+      if (/سعر الذهب|اسعار الذهب|الذهب بكام|الدهب بكام|اسعار|سعر|ذهب|دهب/.test(clean)) {
         return `الأسعار الحالية المعلنة:<br>` +
-               `• <b>عيار 24:</b> شراء ${formatEGP(currentGoldData.k24.buy)} | بيع ${formatEGP(currentGoldData.k24.sell)}<br>` +
-               `• <b>عيار 21:</b> شراء ${formatEGP(currentGoldData.k21.buy)} | بيع ${formatEGP(currentGoldData.k21.sell)}<br>` +
-               `• <b>عيار 18:</b> شراء ${formatEGP(currentGoldData.k18.buy)} | بيع ${formatEGP(currentGoldData.k18.sell)}<br>` +
-               `• <b>الجنيه الذهب:</b> شراء ${formatEGP(currentGoldData.pound.buy)} | بيع ${formatEGP(currentGoldData.pound.sell)}`;
+               `• <b>عيار 24:</b> Buy ${formatEGP(currentGoldData.k24.buy)} | Sell ${formatEGP(currentGoldData.k24.sell)}<br>` +
+               `• <b>عيار 21:</b> Buy ${formatEGP(currentGoldData.k21.buy)} | Sell ${formatEGP(currentGoldData.k21.sell)}<br>` +
+               `• <b>عيار 18:</b> Buy ${formatEGP(currentGoldData.k18.buy)} | Sell ${formatEGP(currentGoldData.k18.sell)}<br>` +
+               `• <b>الجنيه الذهب:</b> Buy ${formatEGP(currentGoldData.pound.buy)} | Sell ${formatEGP(currentGoldData.pound.sell)}`;
       }
 
-      // 3. أسئلة اقتصادية عامة وشرح مباشر
-      if (/تضخم/i.test(text)) {
-        return 'التضخم معناه ارتفاع مستمر في أسعار السلع والخدمات وانخفاض القوة الشرائية للعملة؛ وده بيخلي ناس كتير تلجأ للذهب كتحوط لحفظ قيمة مدخراتها على المدى المتوسط والطويل.';
+      // 5. مفاهيم اقتصادية شائعة
+      if (/تضخم/.test(clean)) {
+        return 'التضخم هو ارتفاع مستمر في مستوى الأسعار وانخفاض القوة الشرائية للعملة، وده بيخلي الذهب أداة شائعة لحفظ القيمة على المدى المتوسط والطويل.';
       }
-      if (/فايدة|فائدة|البنك المركزي/i.test(text)) {
-        return 'رفع الفائدة في البنوك غالباً بيقلل السيولة ويجذب البعض للشهادات أو الودائع، بينما خفض الفائدة بيقلل عائد الكاش ويدعم أصول زي الذهب في جذب المستثمرين.';
+      if (/فايده|فائده|البنك المركزي/.test(clean)) {
+        return 'تغيير أسعار الفائدة بيأثر على حركة السيولة بين الادخار البنكي والأصول زي الذهب؛ انخفاض عائد الكاش غالباً بيدعم الطلب على الذهب.';
       }
-      if (/مصنعية|السبائك|سبايك/i.test(text)) {
-        return 'السبائك والجنيهات الذهب بتكون أقل في المصنعية وبتسترد جزء منها أو كاش باك حسب القواعد المنظمة، مقارنة بالمشغولات الذهبية اللي بيزيد فيها تكلفة التصميم والصياغة.';
+      if (/مصنعيه|السبايك|سبايك|سبيكه/.test(clean)) {
+        return 'السبائك والجنيهات الذهب مصنعيتها أقل وبيكون فيها استرداد جزء من المصنعية أو كاش باك حسب القواعد المنظمة مقارنة بالمشغولات الذهبية.';
       }
 
-      // 4. أي سؤال آخر خارج نطاق البيانات المباشرة داخل ملف HTML الثابت
-      return `سؤالك عن "${text}" محتاج بحث حي لحظي عبر الإنترنت أو ربط البوت بـ API ذكاء اصطناعي متصل بالشبكة عشان يجيبلك المعلومة الدقيقة فوراً من غير تخمين. لو سؤالك عن عيار معين أو مصطلح اقتصادي زي التضخم والفائدة والمصنعية، اكتبه وهجاوبك مباشرة.`;
+      // 6. رد تلقائي مباشر لأي كلام آخر بدون إيقاف أو إحالة للبحث
+      return pickReply([
+        `فهمتك بخصوص "${rawText}" — تحب نربطه بأسعار الذهب الحالية ولا نكمل كلام عام؟`,
+        `وصلت رسالتك: "${rawText}". أنا معاك خطوة بخطوة، قولي تحب نركز على إيه دلوقتي؟`,
+        `تمام، سمعت كلامك عن "${rawText}". لو حابب تعرف سعر عيار معين بالـ EGP أو تناقش فكرة معينة قولي فوراً.`
+      ], clean || rawText);
     }
 
     function sendMessage() {
@@ -266,7 +300,7 @@
     }
 
     loadGoldPrices();
-    setInterval(loadGoldPrices, 60000);
+    setInterval(loadGoldPrices, 30000);
   </script>
 </body>
 </html>

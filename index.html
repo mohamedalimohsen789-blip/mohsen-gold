@@ -176,7 +176,7 @@
     <!-- صفحة Mohsen AI -->
     <div id="page-ai" class="page">
       <div id="chat-stream" class="chat-stream">
-        <div id="welcome-msg" class="msg bot-msg">أهلاً بيك في Mohsen AI. اسألني عن أسعار الذهب أو أي معلومة.</div>
+        <div id="welcome-msg" class="msg bot-msg">أهلاً بيك في Mohsen AI. اسألني في أي حاجة عن الذهب والبورصة أو غيرهم.</div>
       </div>
       <div class="input-bar">
         <div class="input-row">
@@ -200,8 +200,9 @@
     const GEMINI_MODEL = 'gemini-2.5-flash';
 
     const CUSTOM_API_URL = '';
-    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v6';
-    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v6';
+    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v9';
+    const MOVE_STORAGE_KEY = 'gold_last_move_v9';
+    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v9';
 
     const STOP_WORDS = new Set([
       'في', 'من', 'على', 'الى', 'إلى', 'عن', 'مع', 'ده', 'دي', 'دا', 'هو', 'هي',
@@ -211,10 +212,10 @@
     ]);
 
     const KNOWN_VOCABULARY = [
-      'عيار', 'جنيه', 'ذهب', 'دهب', 'سعر', 'اسعار', 'بكام', 'شراء', 'بيع',
-      'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور', 'شكرا', 'تسلم',
-      'اسمي', 'انسى', 'امسح', 'معقول', 'بجد', 'ازاي', 'ليه', 'تضخم', 'فايده',
-      'مصنعيه', 'عامل', 'حلوه', 'كويسه', 'مناسبه', 'غالي', 'رخيص', 'معلومه'
+      'عيار', 'جنيه', 'ذهب', 'دهب', 'ذهي', 'سعر', 'اسعار', 'بكام', 'شراء', 'بيع',
+      'بورصه', 'بورصة', 'اسهم', 'سهم', 'مؤشر', 'تداول', 'سيوله', 'تضخم', 'فايده',
+      'مصنعيه', 'اوقيه', 'اونصه', 'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور',
+      'اسمي', 'انسى', 'امسح', 'هتزيد', 'تزيد', 'هتنزل', 'تنزل', 'تقل', 'يقل', 'اخر', 'مره', 'مرا'
     ];
 
     const GREETING_WORDS = new Set([
@@ -222,6 +223,7 @@
     ]);
 
     let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
+    let lastRecordedMove = loadLastMove();
     let hasInitialBaseline = false;
     let conversationHistory = [];
     let repeatCounters = {};
@@ -236,6 +238,30 @@
         k18: { buy: Number(data.k18.buy), sell: Number(data.k18.sell) },
         pound: { buy: Number(data.pound.buy), sell: Number(data.pound.sell) }
       };
+    }
+
+    function loadLastMove() {
+      try {
+        const raw = localStorage.getItem(MOVE_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (parsed && (parsed.direction === 'up' || parsed.direction === 'down')) {
+          return parsed;
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function saveLastMove(direction, summary) {
+      const payload = {
+        direction,
+        summary,
+        time: new Date().toLocaleTimeString('en-US', { hour12: true })
+      };
+      lastRecordedMove = payload;
+      try {
+        localStorage.setItem(MOVE_STORAGE_KEY, JSON.stringify(payload));
+      } catch (e) {}
     }
 
     function loadMemoryStore() {
@@ -311,14 +337,26 @@
     function detectPriceChanges(oldData, newData) {
       const labels = { k24: '24K', k21: '21K', k18: '18K', pound: 'Gold Pound' };
       const changes = [];
+      let upCount = 0;
+      let downCount = 0;
+
       ['k24', 'k21', 'k18', 'pound'].forEach((key) => {
         if (oldData[key].buy !== newData[key].buy) {
+          if (newData[key].buy > oldData[key].buy) upCount++;
+          else downCount++;
           changes.push(`${labels[key]} Buy: ${formatEGP(oldData[key].buy)} -> ${formatEGP(newData[key].buy)}`);
         }
         if (oldData[key].sell !== newData[key].sell) {
+          if (newData[key].sell > oldData[key].sell) upCount++;
+          else downCount++;
           changes.push(`${labels[key]} Sell: ${formatEGP(oldData[key].sell)} -> ${formatEGP(newData[key].sell)}`);
         }
       });
+
+      if (changes.length > 0) {
+        const direction = upCount >= downCount ? 'up' : 'down';
+        saveLastMove(direction, changes[0]);
+      }
       return changes;
     }
 
@@ -549,41 +587,34 @@
       return variants[idx % variants.length];
     }
 
-    function getAppGoldPricesReply(rawText) {
-      const clean = normalizeText(rawText);
-      const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
-        ? `${escapeHtml(memoryStore.userProfile.name)}، `
-        : '';
+    function isDirectPriceLookup(clean) {
+      return /(?:سعر|اسعار|بكام|كام\s+سعر|الذهب\s+بكام|الدهب\s+بكام|عيار\s*(?:24|21|18)|24k|21k|18k|جنيه\s+ذهب|الجنيه)/.test(clean)
+        && !/(?:هتزيد|تزيد|هتنزل|تنزل|تقل|يقل|اخر\s+مر[هةا]|بورص[هة]|اسهم|مؤشر|تضخم|فايد[هة]|تحليل|توقع|توقعات|علاقه|فرق)/.test(clean);
+    }
 
-      if (/حلوه|كويسه|مناسبه|غالي|رخيص|مشتري|ابيع/.test(clean)) {
-        return pickVariant([
-          `${namePrefix}عيار 21 في التطبيق حالياً: شراء ${formatEGP(currentGoldData.k21.buy)} وبيع ${formatEGP(currentGoldData.k21.sell)}. كونه مناسب أو لأ بيعتمد على هدفك (ادخار طويل ولا حركة قصيرة) ومقارنته بسعر السوق وقت التنفيذ.`,
-          `${namePrefix}الأسعار الحالية في التطبيق: 21K شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}، والجنيه الذهب شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}. التقييم بيرجع لمدتك وحساب المصنعية.`
-        ], 'peval');
-      }
-
+    function getAppGoldPricesReply(clean, namePrefix) {
       if (/عيار\s*21|21k/.test(clean)) {
         return pickVariant([
           `${namePrefix}عيار 21 في التطبيق: شراء ${formatEGP(currentGoldData.k21.buy)} | بيع ${formatEGP(currentGoldData.k21.sell)}`,
-          `${namePrefix}سعر عيار 21 الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.k21.buy)} والبيع ${formatEGP(currentGoldData.k21.sell)}.`
+          `${namePrefix}سعر عيار 21 الحالي في التطبيق شراء ${formatEGP(currentGoldData.k21.buy)} والبيع ${formatEGP(currentGoldData.k21.sell)}.`
         ], 'p21');
       }
       if (/عيار\s*24|24k/.test(clean)) {
         return pickVariant([
           `${namePrefix}عيار 24 في التطبيق: شراء ${formatEGP(currentGoldData.k24.buy)} | بيع ${formatEGP(currentGoldData.k24.sell)}`,
-          `${namePrefix}سعر عيار 24 الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.k24.buy)} والبيع ${formatEGP(currentGoldData.k24.sell)}.`
+          `${namePrefix}سعر عيار 24 الحالي في التطبيق شراء ${formatEGP(currentGoldData.k24.buy)} والبيع ${formatEGP(currentGoldData.k24.sell)}.`
         ], 'p24');
       }
       if (/عيار\s*18|18k/.test(clean)) {
         return pickVariant([
           `${namePrefix}عيار 18 في التطبيق: شراء ${formatEGP(currentGoldData.k18.buy)} | بيع ${formatEGP(currentGoldData.k18.sell)}`,
-          `${namePrefix}سعر عيار 18 الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.k18.buy)} والبيع ${formatEGP(currentGoldData.k18.sell)}.`
+          `${namePrefix}سعر عيار 18 الحالي في التطبيق شراء ${formatEGP(currentGoldData.k18.buy)} والبيع ${formatEGP(currentGoldData.k18.sell)}.`
         ], 'p18');
       }
       if (/جنيه|الجنيه/.test(clean)) {
         return pickVariant([
           `${namePrefix}الجنيه الذهب في التطبيق: شراء ${formatEGP(currentGoldData.pound.buy)} | بيع ${formatEGP(currentGoldData.pound.sell)}`,
-          `${namePrefix}سعر الجنيه الذهب الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.pound.buy)} والبيع ${formatEGP(currentGoldData.pound.sell)}.`
+          `${namePrefix}سعر الجنيه الذهب الحالي في التطبيق شراء ${formatEGP(currentGoldData.pound.buy)} والبيع ${formatEGP(currentGoldData.pound.sell)}.`
         ], 'ppound');
       }
 
@@ -636,8 +667,12 @@
         return 'تمام، هعتمد التوضيح ده بعد كده.';
       }
 
-      if (/عيار\s*(24|21|18)|24k|21k|18k|جنيه|الجنيه|ذهب|دهب|ذهي|سعر|اسعار|بكام/.test(norm)) {
-        return getAppGoldPricesReply(corrected);
+      const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
+        ? `${escapeHtml(memoryStore.userProfile.name)}، `
+        : '';
+
+      if (isDirectPriceLookup(norm)) {
+        return getAppGoldPricesReply(norm, namePrefix);
       }
 
       const learnedMatch = findBestLearnedMatch(corrected) || findBestLearnedMatch(trimmed);
@@ -658,27 +693,50 @@
       if (/^(اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|هلا|ازيك|اخبارك|منور|عامل ايه)$/.test(clean)
         || (words.length === 1 && GREETING_WORDS.has(words[0]))) {
         return pickVariant([
-          `${namePrefix}أهلاً بيك. اسألني عن أسعار الذهب أو أي معلومة تحب تعرفها.`,
-          `${namePrefix}أهلاً، منور. قولّي تحب تعرف إيه دلوقتي؟`
+          `${namePrefix}أهلاً بيك. اسألني في أي حاجة عن الذهب والبورصة أو غيرهم.`,
+          `${namePrefix}أهلاً، منور. تحب تسأل عن إيه؟`
         ], 'greet');
       }
 
-      if (/تضخم/.test(clean)) {
-        return `${namePrefix}التضخم معناه ارتفاع الأسعار وتراجع القوة الشرائية للعملة مع الوقت، وده بيخلي ناس كتير تعتمد على الذهب كأداة لحفظ القيمة.`;
+      if (/(?:اخر\s+مر[هةا]|آخر\s+مر[هةة]).*(?:زاد|زادت|قل|قلت|نزل|نزلت)/.test(clean)
+        || /(?:زاد|زادت|قل|قلت).*(?:اخر\s+مر[هةا]|آخر\s+مر[هةة])/.test(clean)) {
+        if (lastRecordedMove) {
+          const dirLabel = lastRecordedMove.direction === 'up' ? 'زاد' : 'قل';
+          return `${namePrefix}آخر تغير رصده التطبيق كان إنه ${dirLabel} (${lastRecordedMove.summary} — ${lastRecordedMove.time}).`;
+        }
+        return `${namePrefix}السعر ثابت حالياً على أحدث قراءة في التطبيق ومفيش حركة صعود أو هبوط جديدة اتسجلت لحد دلوقتي.`;
       }
 
-      if (/فايده|فائده|مركزي/.test(clean)) {
-        return `${namePrefix}تغيير سعر الفائدة بيأثر على حركة المدخرات والسيولة؛ لما الفائدة بترتفع بيزيد أحياناً الإقبال على الادخار البنكي مقابل الذهب والعكس.`;
+      if (/(?:هتزيد|تزيد|هتنزل|تنزل|تقل|يقل|توقعات|توقع|اتجاه|مستقبل)/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}مفيش حد يقدر يجزم السعر هيزيد ولا هيقل بدقة؛ الحركة بتعتمد على سعر الأوقية عالمياً، وسعر الصرف، وحركة البورصة والسيولة، والفايدة والتضخم.`,
+          `${namePrefix}صعود أو هبوط الذهب والبورصة مرتبط بعوامل كتير زي الفايدة العالمية، التضخم، السيولة، والعرض والطلب؛ فالأفضل تقرر حسب مدتك وهدفك وإدارة المخاطر.`
+        ], 'trend');
+      }
+
+      if (/بورص[هة]|اسهم|سهم|مؤشر|تداول|سيول[هة]/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}البورصة بتعكس توقعات المستثمرين وحركة السيولة والأرباح، وأحياناً بيحصل تبديل سيولة بين الأسهم والذهب حسب شهية المخاطرة والفايدة.`,
+          `${namePrefix}في البورصة والذهب، إدارة المخاطر وتوزيع السيولة أهم من مطاردة حركة سريعة؛ كل أداة ليها طبيعة مختلفة في العائد والتذبذب.`
+        ], 'market');
+      }
+
+      if (/تضخم/.test(clean)) {
+        return `${namePrefix}التضخم معناه زيادة الأسعار وتراجع القوة الشرائية للعملة مع الوقت، وده بيخلي الذهب أداة شائعة لحفظ القيمة مقارنة بالكاش.`;
+      }
+
+      if (/فايد[هة]|مركزي/.test(clean)) {
+        return `${namePrefix}سعر الفائدة بيأثر على تكلفة الاقتراض وجاذبية أدوات الدخل الثابت مقابل الأسهم والذهب بحسب توقعات السوق.`;
       }
 
       if (/مصنعيه|سبايك|سبيكه/.test(clean)) {
-        return `${namePrefix}السبائك والجنيهات الذهبية مصنعيتها أقل من المشغولات، وبعض السبائك بيتم استرداد جزء من مصنعيتها حسب الشروط.`;
+        return `${namePrefix}المشغولات الذهبية فيها مصنعية أعلى مقابل الصياغة، بينما السبائك والجنيهات مصنعيتها أقل وبتقرب أكتر من قيمة الذهب الخام.`;
       }
 
       return pickVariant([
-        `${namePrefix}أنا هنا أساعدك؛ اسألني عن أسعار الذهب في التطبيق أو أي معلومة عامة تحب تعرفها.`,
-        `${namePrefix}قولي سؤالك أو المعلومة اللي محتاجها وهجاوبك بشكل مباشر.`
-      ], 'info_fallback');
+        `${namePrefix}أنا معاك؛ اسألني في أي حاجة عن الذهب والبورصة أو أي موضوع مفتوح تحب تتكلم فيه.`,
+        `${namePrefix}قولي سؤالك أو الفكرة اللي في بالك وهرد عليك مباشرة.`
+      ], 'open_fallback');
     }
 
     async function askGeminiOpen(userText) {
@@ -691,10 +749,11 @@
 
       const systemInstruction =
         `أنت مساعد ذكي باسم Mohsen AI. فكر داخلياً وأرسل الإجابة النهائية المباشرة والواضحة فقط باللغة العربية المصرية دون مقدمات أو قوالب مثل "في موضوع...". ` +
-        `إذا سأل المستخدم عن أسعار الذهب بأي صيغة، اذكر الأسعار الحالية المسجلة في التطبيق بالـ EGP: ${pricesSummary} ` +
+        `جاوب على أي سؤال عن الذهب أو البورصة أو الاستثمار أو أي موضوع مفتوح آخر بشكل طبيعي ومباشر وغير مقيد بقوالب ثابتة. ` +
+        `إذا سأل المستخدم مباشرة عن أسعار الذهب الحالية في التطبيق فاذكرها بالـ EGP: ${pricesSummary} ` +
         (savedName ? `اسم المستخدم المحفوظ: "${savedName}".` : '');
 
-      const contents = conversationHistory.slice(-8).map((item) => ({
+      const contents = conversationHistory.slice(-10).map((item) => ({
         role: item.role === 'user' ? 'user' : 'model',
         parts: [{ text: item.text }]
       }));

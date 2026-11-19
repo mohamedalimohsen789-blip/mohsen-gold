@@ -176,7 +176,7 @@
     <!-- صفحة Mohsen AI -->
     <div id="page-ai" class="page">
       <div id="chat-stream" class="chat-stream">
-        <div id="welcome-msg" class="msg bot-msg">أهلاً بيك في Mohsen AI. اسألني في أي حاجة أو قولي اسمك.</div>
+        <div id="welcome-msg" class="msg bot-msg">أهلاً بيك في Mohsen AI. اسألني عن أسعار الذهب أو أي معلومة.</div>
       </div>
       <div class="input-bar">
         <div class="input-row">
@@ -196,17 +196,17 @@
       pound: { buy: 45680, sell: 46080 }
     };
 
-    // ضع مفتاح Gemini API هنا أو اتركه فارغاً لاستخدام الرد المحلي
     const GEMINI_API_KEY = '';
     const GEMINI_MODEL = 'gemini-2.5-flash';
 
     const CUSTOM_API_URL = '';
-    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v3';
-    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v3';
+    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v5';
+    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v5';
 
     let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
     let hasInitialBaseline = false;
     let conversationHistory = [];
+    let repeatCounters = {};
     let isSending = false;
     let memoryStore = loadMemoryStore();
 
@@ -252,7 +252,7 @@
     function applySavedWelcomeName() {
       const welcomeEl = document.getElementById('welcome-msg');
       if (welcomeEl && memoryStore.userProfile && memoryStore.userProfile.name) {
-        welcomeEl.innerHTML = `أهلاً بيك يا <b>${escapeHtml(memoryStore.userProfile.name)}</b> في Mohsen AI. اسألني في أي حاجة.`;
+        welcomeEl.innerHTML = `أهلاً بيك يا <b>${escapeHtml(memoryStore.userProfile.name)}</b> في Mohsen AI.`;
       }
     }
 
@@ -408,14 +408,76 @@
       }
     }
 
-    function handleUserNameCommands(rawText) {
+    function normalizeText(str) {
+      return str
+        .toLowerCase()
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي')
+        .replace(/[ًٌٍَُِّ~ْ.,!?؟،؛:()\-_"'/\\]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+    }
+
+    function pickVariant(variants, key) {
+      const idx = repeatCounters[key] || 0;
+      repeatCounters[key] = idx + 1;
+      return variants[idx % variants.length];
+    }
+
+    function getAppGoldPricesReply(rawText) {
+      const clean = normalizeText(rawText);
+      const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
+        ? `${escapeHtml(memoryStore.userProfile.name)}، `
+        : '';
+
+      if (/عيار\s*21|21k/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}عيار 21 في التطبيق: شراء ${formatEGP(currentGoldData.k21.buy)} | بيع ${formatEGP(currentGoldData.k21.sell)}`,
+          `${namePrefix}سعر عيار 21 الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.k21.buy)} والبيع ${formatEGP(currentGoldData.k21.sell)}.`
+        ], 'p21');
+      }
+      if (/عيار\s*24|24k/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}عيار 24 في التطبيق: شراء ${formatEGP(currentGoldData.k24.buy)} | بيع ${formatEGP(currentGoldData.k24.sell)}`,
+          `${namePrefix}سعر عيار 24 الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.k24.buy)} والبيع ${formatEGP(currentGoldData.k24.sell)}.`
+        ], 'p24');
+      }
+      if (/عيار\s*18|18k/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}عيار 18 في التطبيق: شراء ${formatEGP(currentGoldData.k18.buy)} | بيع ${formatEGP(currentGoldData.k18.sell)}`,
+          `${namePrefix}سعر عيار 18 الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.k18.buy)} والبيع ${formatEGP(currentGoldData.k18.sell)}.`
+        ], 'p18');
+      }
+      if (/جنيه|الجنيه/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}الجنيه الذهب في التطبيق: شراء ${formatEGP(currentGoldData.pound.buy)} | بيع ${formatEGP(currentGoldData.pound.sell)}`,
+          `${namePrefix}سعر الجنيه الذهب الموجود في التطبيق دلوقتي: شراء ${formatEGP(currentGoldData.pound.buy)} والبيع ${formatEGP(currentGoldData.pound.sell)}.`
+        ], 'ppound');
+      }
+
+      return pickVariant([
+        `${namePrefix}الأسعار الحالية في التطبيق:\n` +
+        `عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} | بيع ${formatEGP(currentGoldData.k24.sell)}\n` +
+        `عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} | بيع ${formatEGP(currentGoldData.k21.sell)}\n` +
+        `عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} | بيع ${formatEGP(currentGoldData.k18.sell)}\n` +
+        `الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} | بيع ${formatEGP(currentGoldData.pound.sell)}`,
+        `${namePrefix}أسعار الذهب في التطبيق حالياً بالـ EGP:\n` +
+        `• عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} / بيع ${formatEGP(currentGoldData.k24.sell)}\n` +
+        `• عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}\n` +
+        `• عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} / بيع ${formatEGP(currentGoldData.k18.sell)}\n` +
+        `• الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}`
+      ], 'pall');
+    }
+
+    function thinkSilently(rawText) {
       const trimmed = rawText.trim();
-      const norm = trimmed.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
+      const norm = normalizeText(trimmed);
 
       if (/^(انس[يى]\s+اسمي|امسح\s+اسمي|احذف\s+اسمي)$/.test(norm)) {
         memoryStore.userProfile.name = '';
         saveMemoryStore();
-        return 'تم مسح اسمك المحفوظ.';
+        return 'تم مسح اسمك.';
       }
 
       if (/^(اسمي\s*(ايه|إيه|ايش|شو)?|انا\s+مين|عارف\s+اسمي|تعرف\s+اسمي|فاكر\s+اسمي)\s*[؟?]*$/.test(norm)) {
@@ -431,11 +493,46 @@
         if (candidate && candidate.length >= 2 && candidate.length <= 40) {
           memoryStore.userProfile.name = candidate;
           saveMemoryStore();
-          return `تمام، هفضل فاكرك باسم ${escapeHtml(candidate)}.`;
+          return `تمام، اسمك بقى محفوظ عندي: ${escapeHtml(candidate)}.`;
         }
       }
 
+      if (/عيار\s*(24|21|18)|24k|21k|18k|جنيه|الجنيه|ذهب|دهب|ذهي|سعر|اسعار|بكام/.test(norm)) {
+        return getAppGoldPricesReply(trimmed);
+      }
+
       return null;
+    }
+
+    function localDirectFallback(rawText) {
+      const clean = normalizeText(rawText);
+      const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
+        ? `${escapeHtml(memoryStore.userProfile.name)}، `
+        : '';
+
+      if (/^(اهلا|مرحبا|سلام|السلام عليكم|هاي|هلا|ازيك|اخبارك|منور|منول|عامل ايه)$/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}أهلاً بيك. اسألني عن أسعار الذهب أو أي معلومة تحب تعرفها.`,
+          `${namePrefix}أهلاً، منور. قولّي تحب تعرف إيه دلوقتي؟`
+        ], 'greet');
+      }
+
+      if (/تضخم/.test(clean)) {
+        return `${namePrefix}التضخم معناه ارتفاع الأسعار وتراجع القوة الشرائية للعملة مع الوقت، وده بيخلي ناس كتير تعتمد على الذهب كأداة لحفظ القيمة.`;
+      }
+
+      if (/فايده|فائده|مركزي/.test(clean)) {
+        return `${namePrefix}تغيير سعر الفائدة بيأثر على حركة المدخرات والسيولة؛ لما الفائدة بترتفع بيزيد أحياناً الإقبال على الادخار البنكي مقابل الذهب والعكس.`;
+      }
+
+      if (/مصنعيه|سبايك|سبيكه/.test(clean)) {
+        return `${namePrefix}السبائك والجنيهات الذهبية مصنعيتها أقل من المشغولات، وبعض السبائك بيتم استرداد جزء من مصنعيتها حسب الشروط.`;
+      }
+
+      return pickVariant([
+        `${namePrefix}أنا هنا أساعدك؛ اسألني عن أسعار الذهب في التطبيق أو أي معلومة عامة تحب تعرفها.`,
+        `${namePrefix}قولي سؤالك أو المعلومة اللي محتاجها وهجاوبك بشكل مباشر.`
+      ], 'info_fallback');
     }
 
     async function askGeminiOpen(userText) {
@@ -447,9 +544,9 @@
         `Gold Pound Buy ${formatEGP(currentGoldData.pound.buy)} / Sell ${formatEGP(currentGoldData.pound.sell)}.`;
 
       const systemInstruction =
-        `أنت مساعد ذكي باسم Mohsen AI. أجب مباشرة ومختصراً وواضحاً باللغة العربية المصرية على أي سؤال مفتوح يطرحه المستخدم، دون مقدمات طويلة أو قوالب مثل "في موضوع...". ` +
-        (savedName ? `اسم المستخدم المحفوظ هو "${savedName}". ` : '') +
-        `الأسعار الحالية المسجلة في التطبيق بالـ EGP هي: ${pricesSummary}`;
+        `أنت مساعد ذكي باسم Mohsen AI. فكر داخلياً وأرسل الإجابة النهائية المباشرة والواضحة فقط باللغة العربية المصرية دون مقدمات أو قوالب مثل "في موضوع...". ` +
+        `إذا سأل المستخدم عن أسعار الذهب بأي صيغة، اذكر الأسعار الحالية المسجلة في التطبيق بالـ EGP: ${pricesSummary} ` +
+        (savedName ? `اسم المستخدم المحفوظ: "${savedName}".` : '');
 
       const contents = conversationHistory.slice(-8).map((item) => ({
         role: item.role === 'user' ? 'user' : 'model',
@@ -467,9 +564,7 @@
         })
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const data = await res.json();
       const candidateText = data?.candidates?.[0]?.content?.parts
@@ -477,46 +572,18 @@
         .join('')
         .trim();
 
-      if (!candidateText) {
-        throw new Error('Empty response');
-      }
-
-      return escapeHtml(candidateText);
+      if (!candidateText) throw new Error('Empty response');
+      return candidateText;
     }
 
-    function fallbackLocalReply(rawText) {
-      const clean = rawText.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
-      if (/عيار\s*21|21k/.test(clean)) {
-        return `عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} | بيع ${formatEGP(currentGoldData.k21.sell)}`;
-      }
-      if (/عيار\s*24|24k/.test(clean)) {
-        return `عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} | بيع ${formatEGP(currentGoldData.k24.sell)}`;
-      }
-      if (/عيار\s*18|18k/.test(clean)) {
-        return `عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} | بيع ${formatEGP(currentGoldData.k18.sell)}`;
-      }
-      if (/جنيه|الجنيه/.test(clean)) {
-        return `الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} | بيع ${formatEGP(currentGoldData.pound.sell)}`;
-      }
-      if (/ذهب|دهب|سعر|اسعار|بكام/.test(clean)) {
-        return (
-          `عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} / بيع ${formatEGP(currentGoldData.k24.sell)}\n` +
-          `عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}\n` +
-          `عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} / بيع ${formatEGP(currentGoldData.k18.sell)}\n` +
-          `الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}`
-        );
-      }
-      return 'لتفعيل الإجابات المفتوحة على أي سؤال، ضع مفتاح GEMINI_API_KEY في الكود وتأكد من وجود إنترنت.';
-    }
-
-    function appendBotBubble(htmlContent) {
+    function sendFinalBotMessage(textOrHtml, isHtml = false) {
       const stream = document.getElementById('chat-stream');
       const div = document.createElement('div');
       div.className = 'msg bot-msg';
-      div.innerHTML = htmlContent;
+      if (isHtml) div.innerHTML = textOrHtml;
+      else div.textContent = textOrHtml;
       stream.appendChild(div);
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      return div;
     }
 
     async function sendMessage() {
@@ -534,34 +601,31 @@
 
       conversationHistory.push({ role: 'user', text });
 
-      const nameReply = handleUserNameCommands(text);
-      if (nameReply) {
-        conversationHistory.push({ role: 'model', text: nameReply.replace(/<[^>]+>/g, '') });
-        appendBotBubble(nameReply);
+      const silentResult = thinkSilently(text);
+      if (silentResult) {
+        conversationHistory.push({ role: 'model', text: silentResult.replace(/<[^>]+>/g, '') });
+        sendFinalBotMessage(silentResult, true);
         return;
       }
 
       if (!GEMINI_API_KEY) {
-        const localAns = fallbackLocalReply(text);
-        conversationHistory.push({ role: 'model', text: localAns });
-        appendBotBubble(escapeHtml(localAns));
+        const localAns = localDirectFallback(text);
+        conversationHistory.push({ role: 'model', text: localAns.replace(/<br>/g, '\n') });
+        sendFinalBotMessage(localAns, true);
         return;
       }
 
       isSending = true;
-      const thinkingBubble = appendBotBubble('جاري التفكير...');
-
       try {
-        const answerHtml = await askGeminiOpen(text);
-        thinkingBubble.innerHTML = answerHtml;
-        conversationHistory.push({ role: 'model', text: thinkingBubble.textContent || '' });
+        const finalAnswer = await askGeminiOpen(text);
+        conversationHistory.push({ role: 'model', text: finalAnswer });
+        sendFinalBotMessage(finalAnswer, false);
       } catch (err) {
-        const fallbackText = fallbackLocalReply(text);
-        thinkingBubble.textContent = fallbackText;
-        conversationHistory.push({ role: 'model', text: fallbackText });
+        const fallbackText = localDirectFallback(text);
+        conversationHistory.push({ role: 'model', text: fallbackText.replace(/<br>/g, '\n') });
+        sendFinalBotMessage(fallbackText, true);
       } finally {
         isSending = false;
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       }
     }
 

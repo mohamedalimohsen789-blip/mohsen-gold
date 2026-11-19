@@ -1,0 +1,11 @@
+{
+  "name": "سوق الذهبي & AI",
+  "short_name": "سوق الذهبي",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#000000",
+  "dir": "rtl",
+  "lang": "ar"
+}

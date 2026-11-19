@@ -200,8 +200,26 @@
     const GEMINI_MODEL = 'gemini-2.5-flash';
 
     const CUSTOM_API_URL = '';
-    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v5';
-    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v5';
+    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v6';
+    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v6';
+
+    const STOP_WORDS = new Set([
+      'في', 'من', 'على', 'الى', 'إلى', 'عن', 'مع', 'ده', 'دي', 'دا', 'هو', 'هي',
+      'انا', 'أنا', 'انت', 'إنت', 'ليه', 'ايه', 'إيه', 'هيا', 'هي', 'ازاي', 'إزاي',
+      'هل', 'ما', 'مش', 'لو', 'كان', 'يكون', 'كده', 'كذا', 'بس', 'يعني', 'اللي',
+      'و', 'او', 'أو', 'قولي', 'قلي', 'ولا', 'لا'
+    ]);
+
+    const KNOWN_VOCABULARY = [
+      'عيار', 'جنيه', 'ذهب', 'دهب', 'سعر', 'اسعار', 'بكام', 'شراء', 'بيع',
+      'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور', 'شكرا', 'تسلم',
+      'اسمي', 'انسى', 'امسح', 'معقول', 'بجد', 'ازاي', 'ليه', 'تضخم', 'فايده',
+      'مصنعيه', 'عامل', 'حلوه', 'كويسه', 'مناسبه', 'غالي', 'رخيص', 'معلومه'
+    ];
+
+    const GREETING_WORDS = new Set([
+      'اهلا', 'مرحبا', 'سلام', 'هاي', 'هلا', 'ازيك', 'اخبارك', 'منور', 'صباح', 'مساء', 'عامل'
+    ]);
 
     let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
     let hasInitialBaseline = false;
@@ -223,15 +241,16 @@
     function loadMemoryStore() {
       try {
         const raw = localStorage.getItem(MEMORY_STORAGE_KEY);
-        if (!raw) return { userProfile: { name: '' } };
+        if (!raw) return { pairs: [], userProfile: { name: '' } };
         const parsed = JSON.parse(raw);
         return {
+          pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
           userProfile: parsed.userProfile && typeof parsed.userProfile === 'object'
             ? { name: typeof parsed.userProfile.name === 'string' ? parsed.userProfile.name : '' }
             : { name: '' }
         };
       } catch (e) {
-        return { userProfile: { name: '' } };
+        return { pairs: [], userProfile: { name: '' } };
       }
     }
 
@@ -419,6 +438,111 @@
         .trim();
     }
 
+    function levenshteinDistance(a, b) {
+      const m = a.length;
+      const n = b.length;
+      if (m === 0) return n;
+      if (n === 0) return m;
+      const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+      for (let i = 0; i <= m; i++) dp[i][0] = i;
+      for (let j = 0; j <= n; j++) dp[0][j] = j;
+      for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          dp[i][j] = Math.min(
+            dp[i - 1][j] + 1,
+            dp[i][j - 1] + 1,
+            dp[i - 1][j - 1] + cost
+          );
+        }
+      }
+      return dp[m][n];
+    }
+
+    function guessClosestWord(word, candidates) {
+      if (!word || word.length < 2 || /^\d+$/.test(word)) return word;
+      let bestWord = word;
+      let bestDist = Infinity;
+      for (const cand of candidates) {
+        if (!cand || Math.abs(cand.length - word.length) > 2) continue;
+        const dist = levenshteinDistance(word, cand);
+        const maxAllowed = cand.length <= 3 ? 1 : (cand.length <= 5 ? 1 : 2);
+        if (dist > 0 && dist <= maxAllowed && dist < bestDist) {
+          bestDist = dist;
+          bestWord = cand;
+        }
+      }
+      return bestWord;
+    }
+
+    function applyTypoCorrection(rawText) {
+      const clean = normalizeText(rawText);
+      const learnedWords = [];
+      for (const pair of memoryStore.pairs || []) {
+        const parts = normalizeText(pair.promptNorm || '').split(' ');
+        for (const p of parts) {
+          if (p.length >= 2 && !STOP_WORDS.has(p)) learnedWords.push(p);
+        }
+      }
+      const candidates = Array.from(new Set([...KNOWN_VOCABULARY, ...learnedWords]));
+      return clean.split(' ').map((w) => guessClosestWord(w, candidates)).join(' ').trim();
+    }
+
+    function extractKeywords(str) {
+      return normalizeText(str)
+        .split(' ')
+        .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
+    }
+
+    function learnAssociation(promptText, answerText, weightBoost = 1) {
+      const cleanPrompt = normalizeText(promptText);
+      const cleanAnswer = answerText.trim();
+      const keywords = extractKeywords(promptText);
+      if (!cleanPrompt || !cleanAnswer) return;
+
+      const existing = memoryStore.pairs.find((p) => p.promptNorm === cleanPrompt);
+      if (existing) {
+        existing.answer = cleanAnswer;
+        existing.keywords = Array.from(new Set([...existing.keywords, ...keywords]));
+        existing.weight = (existing.weight || 1) + weightBoost;
+      } else {
+        memoryStore.pairs.push({
+          promptRaw: promptText.trim(),
+          promptNorm: cleanPrompt,
+          keywords,
+          answer: cleanAnswer,
+          weight: weightBoost
+        });
+      }
+      saveMemoryStore();
+    }
+
+    function findBestLearnedMatch(rawText) {
+      const clean = normalizeText(rawText);
+      const inputKeywords = extractKeywords(rawText);
+      if (!memoryStore.pairs.length || (!clean && !inputKeywords.length)) return null;
+
+      let best = null;
+      let bestScore = 0;
+      for (const pair of memoryStore.pairs) {
+        let score = 0;
+        if (clean === pair.promptNorm) score += 10;
+        else if (clean.includes(pair.promptNorm) || pair.promptNorm.includes(clean)) score += 5;
+
+        const pairKw = pair.keywords || [];
+        if (pairKw.length && inputKeywords.length) {
+          const matches = pairKw.filter((k) => inputKeywords.includes(k)).length;
+          if (matches > 0) score += (matches / Math.max(pairKw.length, inputKeywords.length)) * 4;
+        }
+        score += (pair.weight || 1) * 0.25;
+        if (score > bestScore) {
+          bestScore = score;
+          best = pair;
+        }
+      }
+      return bestScore >= 2.2 ? best : null;
+    }
+
     function pickVariant(variants, key) {
       const idx = repeatCounters[key] || 0;
       repeatCounters[key] = idx + 1;
@@ -430,6 +554,13 @@
       const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
         ? `${escapeHtml(memoryStore.userProfile.name)}، `
         : '';
+
+      if (/حلوه|كويسه|مناسبه|غالي|رخيص|مشتري|ابيع/.test(clean)) {
+        return pickVariant([
+          `${namePrefix}عيار 21 في التطبيق حالياً: شراء ${formatEGP(currentGoldData.k21.buy)} وبيع ${formatEGP(currentGoldData.k21.sell)}. كونه مناسب أو لأ بيعتمد على هدفك (ادخار طويل ولا حركة قصيرة) ومقارنته بسعر السوق وقت التنفيذ.`,
+          `${namePrefix}الأسعار الحالية في التطبيق: 21K شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}، والجنيه الذهب شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}. التقييم بيرجع لمدتك وحساب المصنعية.`
+        ], 'peval');
+      }
 
       if (/عيار\s*21|21k/.test(clean)) {
         return pickVariant([
@@ -472,7 +603,8 @@
 
     function thinkSilently(rawText) {
       const trimmed = rawText.trim();
-      const norm = normalizeText(trimmed);
+      const corrected = applyTypoCorrection(trimmed);
+      const norm = normalizeText(corrected);
 
       if (/^(انس[يى]\s+اسمي|امسح\s+اسمي|احذف\s+اسمي)$/.test(norm)) {
         memoryStore.userProfile.name = '';
@@ -497,20 +629,34 @@
         }
       }
 
+      const lastUserMsg = [...conversationHistory].reverse().find((m) => m.role === 'user');
+      if (/^(لا|مش كده|غلط|صحح|المقصود|قصدي|معناه|بمعنى|يعني ان|خلي بالك|توضيح)/.test(norm) && lastUserMsg && lastUserMsg.text !== trimmed) {
+        const cleanedClarification = trimmed.replace(/^(لا|مش كده|غلط|صحح|المقصود|قصدي|معناه|بمعنى|يعني)\s*/i, '').trim() || trimmed;
+        learnAssociation(lastUserMsg.text, cleanedClarification, 2);
+        return 'تمام، هعتمد التوضيح ده بعد كده.';
+      }
+
       if (/عيار\s*(24|21|18)|24k|21k|18k|جنيه|الجنيه|ذهب|دهب|ذهي|سعر|اسعار|بكام/.test(norm)) {
-        return getAppGoldPricesReply(trimmed);
+        return getAppGoldPricesReply(corrected);
+      }
+
+      const learnedMatch = findBestLearnedMatch(corrected) || findBestLearnedMatch(trimmed);
+      if (learnedMatch) {
+        return escapeHtml(learnedMatch.answer);
       }
 
       return null;
     }
 
     function localDirectFallback(rawText) {
-      const clean = normalizeText(rawText);
+      const clean = normalizeText(applyTypoCorrection(rawText));
       const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
         ? `${escapeHtml(memoryStore.userProfile.name)}، `
         : '';
 
-      if (/^(اهلا|مرحبا|سلام|السلام عليكم|هاي|هلا|ازيك|اخبارك|منور|منول|عامل ايه)$/.test(clean)) {
+      const words = clean.split(' ').filter(Boolean);
+      if (/^(اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|هلا|ازيك|اخبارك|منور|عامل ايه)$/.test(clean)
+        || (words.length === 1 && GREETING_WORDS.has(words[0]))) {
         return pickVariant([
           `${namePrefix}أهلاً بيك. اسألني عن أسعار الذهب أو أي معلومة تحب تعرفها.`,
           `${namePrefix}أهلاً، منور. قولّي تحب تعرف إيه دلوقتي؟`

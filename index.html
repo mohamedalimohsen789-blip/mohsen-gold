@@ -75,7 +75,6 @@
     .up { color: #00e676; font-weight: bold; }
     .down { color: #ff5252; font-weight: bold; }
 
-    /* مساحة الشات مفتوحة بالكامل بدون صندوق محبوس */
     #page-ai.active {
       display: flex;
       flex-direction: column;
@@ -95,6 +94,7 @@
       line-height: 1.7;
       font-size: 14px;
       word-wrap: break-word;
+      white-space: pre-line;
     }
     .bot-msg {
       background-color: #202020;
@@ -176,7 +176,7 @@
     <!-- صفحة Mohsen AI -->
     <div id="page-ai" class="page">
       <div id="chat-stream" class="chat-stream">
-        <div id="welcome-msg" class="msg bot-msg">أهلاً بيك في Mohsen AI. اسألني في أي حاجة أو قولي اسمك وصححلي لو حابب.</div>
+        <div id="welcome-msg" class="msg bot-msg">أهلاً بيك في Mohsen AI. اسألني في أي حاجة أو قولي اسمك.</div>
       </div>
       <div class="input-bar">
         <div class="input-row">
@@ -196,32 +196,18 @@
       pound: { buy: 45680, sell: 46080 }
     };
 
+    // ضع مفتاح Gemini API هنا أو اتركه فارغاً لاستخدام الرد المحلي
+    const GEMINI_API_KEY = '';
+    const GEMINI_MODEL = 'gemini-2.5-flash';
+
     const CUSTOM_API_URL = '';
     const PRICE_STORAGE_KEY = 'gold_last_snapshot_v3';
-    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v1';
-
-    const STOP_WORDS = new Set([
-      'في', 'من', 'على', 'الى', 'إلى', 'عن', 'مع', 'ده', 'دي', 'دا', 'هو', 'هي',
-      'انا', 'أنا', 'انت', 'إنت', 'ليه', 'ايه', 'إيه', 'ازاي', 'إزاي', 'هل', 'ما',
-      'مش', 'لو', 'كان', 'يكون', 'كده', 'كذا', 'بس', 'يعني', 'اللي', 'و', 'او', 'أو'
-    ]);
-
-    const KNOWN_VOCABULARY = [
-      'عيار', 'جنيه', 'ذهب', 'دهب', 'سعر', 'اسعار', 'بكام', 'شراء', 'بيع',
-      'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور', 'شكرا', 'تسلم',
-      'اسمي', 'انسى', 'امسح', 'معقول', 'بجد', 'ازاي', 'ليه', 'تضخم', 'فايده', 'مصنعيه',
-      'عامل', 'معلومه', 'توقعات', 'ادخار', 'استثمار', 'مقارنه', 'تحديث', 'اشعار'
-    ];
-
-    const GREETING_WORDS = new Set([
-      'اهلا', 'مرحبا', 'سلام', 'هاي', 'هلا', 'ازيك', 'اخبارك', 'منور', 'صباح', 'مساء', 'عامل'
-    ]);
+    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v3';
 
     let currentGoldData = cloneGoldData(VERIFIED_GOLD_DATA);
     let hasInitialBaseline = false;
     let conversationHistory = [];
-    let lastReasoningMeta = null;
-    let repeatCounters = {};
+    let isSending = false;
     let memoryStore = loadMemoryStore();
 
     function cloneGoldData(data) {
@@ -237,16 +223,15 @@
     function loadMemoryStore() {
       try {
         const raw = localStorage.getItem(MEMORY_STORAGE_KEY);
-        if (!raw) return { pairs: [], userProfile: { name: '' } };
+        if (!raw) return { userProfile: { name: '' } };
         const parsed = JSON.parse(raw);
         return {
-          pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
           userProfile: parsed.userProfile && typeof parsed.userProfile === 'object'
             ? { name: typeof parsed.userProfile.name === 'string' ? parsed.userProfile.name : '' }
             : { name: '' }
         };
       } catch (e) {
-        return { pairs: [], userProfile: { name: '' } };
+        return { userProfile: { name: '' } };
       }
     }
 
@@ -256,10 +241,18 @@
       } catch (e) {}
     }
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     function applySavedWelcomeName() {
       const welcomeEl = document.getElementById('welcome-msg');
       if (welcomeEl && memoryStore.userProfile && memoryStore.userProfile.name) {
-        welcomeEl.innerHTML = `أهلاً بيك يا <b>${escapeHtml(memoryStore.userProfile.name)}</b> في Mohsen AI. اسألني في أي حاجة أو قولي لو حابب أتعلم معلومة.`;
+        welcomeEl.innerHTML = `أهلاً بيك يا <b>${escapeHtml(memoryStore.userProfile.name)}</b> في Mohsen AI. اسألني في أي حاجة.`;
       }
     }
 
@@ -297,12 +290,7 @@
     }
 
     function detectPriceChanges(oldData, newData) {
-      const labels = {
-        k24: '24K',
-        k21: '21K',
-        k18: '18K',
-        pound: 'Gold Pound'
-      };
+      const labels = { k24: '24K', k21: '21K', k18: '18K', pound: 'Gold Pound' };
       const changes = [];
       ['k24', 'k21', 'k18', 'pound'].forEach((key) => {
         if (oldData[key].buy !== newData[key].buy) {
@@ -355,13 +343,9 @@
       const el = document.getElementById(elId);
       if (!el) return;
       el.classList.remove('up', 'down');
-      if (newVal > oldVal) {
-        el.classList.add('up');
-      } else if (newVal < oldVal) {
-        el.classList.add('down');
-      } else if (defaultClass) {
-        el.classList.add(defaultClass);
-      }
+      if (newVal > oldVal) el.classList.add('up');
+      else if (newVal < oldVal) el.classList.add('down');
+      else if (defaultClass) el.classList.add(defaultClass);
     }
 
     async function loadGoldPrices() {
@@ -372,16 +356,17 @@
       if (CUSTOM_API_URL) {
         try {
           const res = await fetch(CUSTOM_API_URL, { cache: 'no-store' });
-          if (!res.ok) throw new Error('API response error');
-          const apiData = await res.json();
-          if (isValidGoldData(apiData)) {
-            nextData = {
-              sourceLabel: apiData.sourceLabel || 'Live API Feed',
-              k24: { buy: Number(apiData.k24.buy), sell: Number(apiData.k24.sell) },
-              k21: { buy: Number(apiData.k21.buy), sell: Number(apiData.k21.sell) },
-              k18: { buy: Number(apiData.k18.buy), sell: Number(apiData.k18.sell) },
-              pound: { buy: Number(apiData.pound.buy), sell: Number(apiData.pound.sell) }
-            };
+          if (res.ok) {
+            const apiData = await res.json();
+            if (isValidGoldData(apiData)) {
+              nextData = {
+                sourceLabel: apiData.sourceLabel || 'Live API Feed',
+                k24: { buy: Number(apiData.k24.buy), sell: Number(apiData.k24.sell) },
+                k21: { buy: Number(apiData.k21.buy), sell: Number(apiData.k21.sell) },
+                k18: { buy: Number(apiData.k18.buy), sell: Number(apiData.k18.sell) },
+                pound: { buy: Number(apiData.pound.buy), sell: Number(apiData.pound.sell) }
+              };
+            }
           }
         } catch (err) {
           nextData = cloneGoldData(VERIFIED_GOLD_DATA);
@@ -390,16 +375,12 @@
 
       if (hasInitialBaseline) {
         const changes = detectPriceChanges(previousSnapshot, nextData);
-        if (changes.length > 0) {
-          await triggerPriceNotification(changes.join('<br>'));
-        }
+        if (changes.length > 0) await triggerPriceNotification(changes.join('<br>'));
       } else {
         const saved = readSavedGoldData();
         if (saved && JSON.stringify(saved) !== JSON.stringify(nextData)) {
           const changesFromSaved = detectPriceChanges(saved, nextData);
-          if (changesFromSaved.length > 0) {
-            await triggerPriceNotification(changesFromSaved.join('<br>'));
-          }
+          if (changesFromSaved.length > 0) await triggerPriceNotification(changesFromSaved.join('<br>'));
         }
         hasInitialBaseline = true;
       }
@@ -409,13 +390,10 @@
 
       document.getElementById('k24-buy').textContent = formatEGP(currentGoldData.k24.buy);
       document.getElementById('k24-sell').textContent = formatEGP(currentGoldData.k24.sell);
-
       document.getElementById('k21-buy').textContent = formatEGP(currentGoldData.k21.buy);
       document.getElementById('k21-sell').textContent = formatEGP(currentGoldData.k21.sell);
-
       document.getElementById('k18-buy').textContent = formatEGP(currentGoldData.k18.buy);
       document.getElementById('k18-sell').textContent = formatEGP(currentGoldData.k18.sell);
-
       document.getElementById('pound-buy').textContent = formatEGP(currentGoldData.pound.buy);
       document.getElementById('pound-sell').textContent = formatEGP(currentGoldData.pound.sell);
 
@@ -430,107 +408,17 @@
       }
     }
 
-    function normalizeArabic(str) {
-      return str
-        .toLowerCase()
-        .replace(/[أإآ]/g, 'ا')
-        .replace(/ة/g, 'ه')
-        .replace(/ى/g, 'ي')
-        .replace(/[ًٌٍَُِّ~ْ.,!?؟،؛:()\-_"'/\\]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function levenshteinDistance(a, b) {
-      const m = a.length;
-      const n = b.length;
-      if (m === 0) return n;
-      if (n === 0) return m;
-      const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-      for (let i = 0; i <= m; i++) dp[i][0] = i;
-      for (let j = 0; j <= n; j++) dp[0][j] = j;
-      for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
-          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-          dp[i][j] = Math.min(
-            dp[i - 1][j] + 1,
-            dp[i][j - 1] + 1,
-            dp[i - 1][j - 1] + cost
-          );
-        }
-      }
-      return dp[m][n];
-    }
-
-    function guessClosestWord(word, candidates) {
-      if (!word || word.length < 2 || /^\d+$/.test(word)) return word;
-      let bestWord = word;
-      let bestDist = Infinity;
-
-      for (const cand of candidates) {
-        if (!cand || Math.abs(cand.length - word.length) > 2) continue;
-        const dist = levenshteinDistance(word, cand);
-        const maxAllowed = cand.length <= 3 ? 1 : (cand.length <= 5 ? 1 : 2);
-        if (dist > 0 && dist <= maxAllowed && dist < bestDist) {
-          bestDist = dist;
-          bestWord = cand;
-        }
-      }
-      return bestWord;
-    }
-
-    function buildDynamicCandidates() {
-      const learnedWords = [];
-      for (const pair of memoryStore.pairs || []) {
-        const parts = normalizeArabic(pair.promptNorm || '').split(' ');
-        for (const p of parts) {
-          if (p.length >= 2 && !STOP_WORDS.has(p)) {
-            learnedWords.push(p);
-          }
-        }
-      }
-      return Array.from(new Set([...KNOWN_VOCABULARY, ...learnedWords]));
-    }
-
-    function applyTypoCorrection(rawText) {
-      const clean = normalizeArabic(rawText);
-      const candidates = buildDynamicCandidates();
-      const words = clean.split(' ');
-      const correctedWords = words.map((w) => guessClosestWord(w, candidates));
-      return correctedWords.join(' ').trim();
-    }
-
-    function extractKeywords(str) {
-      return normalizeArabic(str)
-        .split(' ')
-        .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
-    }
-
-    function escapeHtml(str) {
-      return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function pickVariant(variants, key) {
-      const idx = repeatCounters[key] || 0;
-      repeatCounters[key] = idx + 1;
-      return variants[idx % variants.length];
-    }
-
     function handleUserNameCommands(rawText) {
       const trimmed = rawText.trim();
-      const clean = normalizeArabic(trimmed);
+      const norm = trimmed.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
 
-      if (/^(انس[يى]\s+اسمي|امسح\s+اسمي|احذف\s+اسمي)$/.test(clean)) {
+      if (/^(انس[يى]\s+اسمي|امسح\s+اسمي|احذف\s+اسمي)$/.test(norm)) {
         memoryStore.userProfile.name = '';
         saveMemoryStore();
         return 'تم مسح اسمك المحفوظ.';
       }
 
-      if (/^(اسمي\s*(ايه|إيه|ايش|شو)?|انا\s+مين|عارف\s+اسمي|تعرف\s+اسمي|فاكر\s+اسمي)\s*[؟?]*$/.test(clean)) {
+      if (/^(اسمي\s*(ايه|إيه|ايش|شو)?|انا\s+مين|عارف\s+اسمي|تعرف\s+اسمي|فاكر\s+اسمي)\s*[؟?]*$/.test(norm)) {
         if (memoryStore.userProfile && memoryStore.userProfile.name) {
           return `اسمك ${escapeHtml(memoryStore.userProfile.name)}.`;
         }
@@ -539,9 +427,7 @@
 
       const nameMatch = trimmed.match(/(?:^|\s)(?:اسمي(?:\s+(?:هو|هي|بقى|بقا))?|انا\s+اسمي|ناديني|قولي\s+يا)\s+([^\s،.!?؟]+(?:\s+[^\s،.!?؟]+){0,2})/i);
       if (nameMatch && nameMatch[1]) {
-        const candidate = nameMatch[1]
-          .replace(/\s+(ايه|إيه|ليه|عشان|يا|ده|دي)$/i, '')
-          .trim();
+        const candidate = nameMatch[1].replace(/\s+(ايه|إيه|ليه|عشان|يا|ده|دي)$/i, '').trim();
         if (candidate && candidate.length >= 2 && candidate.length <= 40) {
           memoryStore.userProfile.name = candidate;
           saveMemoryStore();
@@ -552,231 +438,75 @@
       return null;
     }
 
-    function handleSurpriseOrIntelligenceComment(rawText) {
-      const clean = normalizeArabic(rawText);
-      const isSurprise = /^(معقول|بجد|والله|يا سلام|اوباه|واو|غريب|عجيب|مش ممكن|ازاي ده|ايوه بقي|جامد|حلو ده)\s*[؟!.]*$/.test(clean);
-      const asksWhyOrHow = /^(ازاي\s+(عرفت|جبتها|فهمت|عملتها)|ليه\s+(قلت|رديت|اخترت)\s+كده|عندك\s+ذكاء|فاهم\s+انت)\s*[؟!.]*$/.test(clean);
+    async function askGeminiOpen(userText) {
+      const savedName = memoryStore.userProfile && memoryStore.userProfile.name ? memoryStore.userProfile.name : '';
+      const pricesSummary =
+        `24K Buy ${formatEGP(currentGoldData.k24.buy)} / Sell ${formatEGP(currentGoldData.k24.sell)}, ` +
+        `21K Buy ${formatEGP(currentGoldData.k21.buy)} / Sell ${formatEGP(currentGoldData.k21.sell)}, ` +
+        `18K Buy ${formatEGP(currentGoldData.k18.buy)} / Sell ${formatEGP(currentGoldData.k18.sell)}, ` +
+        `Gold Pound Buy ${formatEGP(currentGoldData.pound.buy)} / Sell ${formatEGP(currentGoldData.pound.sell)}.`;
 
-      if (!isSurprise && !asksWhyOrHow) return null;
+      const systemInstruction =
+        `أنت مساعد ذكي باسم Mohsen AI. أجب مباشرة ومختصراً وواضحاً باللغة العربية المصرية على أي سؤال مفتوح يطرحه المستخدم، دون مقدمات طويلة أو قوالب مثل "في موضوع...". ` +
+        (savedName ? `اسم المستخدم المحفوظ هو "${savedName}". ` : '') +
+        `الأسعار الحالية المسجلة في التطبيق بالـ EGP هي: ${pricesSummary}`;
 
-      if (!lastReasoningMeta) {
-        return pickVariant([
-          'أيوة، بحاول أربط الكلام باللي قدامي وباللي اتقال أو اتحفظ.',
-          'بعتمد على الكلمات والبيانات المتاحة عندي؛ قولي في إيه بالظبط.'
-        ], 'meta_none');
+      const contents = conversationHistory.slice(-8).map((item) => ({
+        role: item.role === 'user' ? 'user' : 'model',
+        parts: [{ text: item.text }]
+      }));
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
 
-      if (lastReasoningMeta.type === 'learned') {
-        return pickVariant([
-          'أيوة، ده من اللي اتسجّل واتحفظ عندي قبل كده.',
-          'جبتها من الذاكرة المحفوظة عندي وطبّقتها على كلامك.'
-        ], 'meta_learned');
+      const data = await res.json();
+      const candidateText = data?.candidates?.[0]?.content?.parts
+        ?.map((p) => p.text || '')
+        .join('')
+        .trim();
+
+      if (!candidateText) {
+        throw new Error('Empty response');
       }
 
-      if (lastReasoningMeta.type === 'price') {
-        return pickVariant([
-          'أيوة، دي الأسعار المتاحة حالياً في البرنامج بالـ EGP.',
-          'خدت الأرقام الحالية من بيانات الأسعار وعرضتهالك بالـ EGP.'
-        ], 'meta_price');
-      }
-
-      return pickVariant([
-        'أيوة، بقرا كلامك وأرد عليه بشكل منطقي على قد المعطيات المتاحة.',
-        'بحاول أدي رد مباشر ومناسب للكلام من غير لف.'
-      ], 'meta_gen');
+      return escapeHtml(candidateText);
     }
 
-    function learnAssociation(promptText, answerText, weightBoost = 1) {
-      const cleanPrompt = normalizeArabic(promptText);
-      const cleanAnswer = answerText.trim();
-      const keywords = extractKeywords(promptText);
-      if (!cleanPrompt || !cleanAnswer) return;
-
-      const existing = memoryStore.pairs.find((p) => p.promptNorm === cleanPrompt);
-      if (existing) {
-        existing.answer = cleanAnswer;
-        existing.keywords = Array.from(new Set([...existing.keywords, ...keywords]));
-        existing.weight = (existing.weight || 1) + weightBoost;
-      } else {
-        memoryStore.pairs.push({
-          promptRaw: promptText.trim(),
-          promptNorm: cleanPrompt,
-          keywords,
-          answer: cleanAnswer,
-          weight: weightBoost
-        });
+    function fallbackLocalReply(rawText) {
+      const clean = rawText.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
+      if (/عيار\s*21|21k/.test(clean)) {
+        return `عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} | بيع ${formatEGP(currentGoldData.k21.sell)}`;
       }
-      saveMemoryStore();
-    }
-
-    function isCorrectionOrClarification(rawText) {
-      const clean = normalizeArabic(rawText);
-      return /^(لا|مش كده|غلط|صحح|المقصود|قصدي|معناه|بمعنى|يعني ان|خلي بالك|توضيح)/.test(clean);
-    }
-
-    function findBestLearnedMatch(rawText) {
-      const clean = normalizeArabic(rawText);
-      const inputKeywords = extractKeywords(rawText);
-      if (!memoryStore.pairs.length || (!clean && !inputKeywords.length)) return null;
-
-      let best = null;
-      let bestScore = 0;
-
-      for (const pair of memoryStore.pairs) {
-        let score = 0;
-        if (clean === pair.promptNorm) {
-          score += 10;
-        } else if (clean.includes(pair.promptNorm) || pair.promptNorm.includes(clean)) {
-          score += 5;
-        }
-
-        const pairKw = pair.keywords || [];
-        if (pairKw.length && inputKeywords.length) {
-          const matches = pairKw.filter((k) => inputKeywords.includes(k)).length;
-          if (matches > 0) {
-            score += (matches / Math.max(pairKw.length, inputKeywords.length)) * 4;
-          }
-        }
-
-        score += (pair.weight || 1) * 0.25;
-
-        if (score > bestScore) {
-          bestScore = score;
-          best = pair;
-        }
+      if (/عيار\s*24|24k/.test(clean)) {
+        return `عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} | بيع ${formatEGP(currentGoldData.k24.sell)}`;
       }
-
-      return bestScore >= 2.2 ? best : null;
-    }
-
-    function synthesizeDirectAnswer(rawText) {
-      const clean = normalizeArabic(rawText);
-      const keywords = extractKeywords(rawText);
-      const namePrefix = memoryStore.userProfile && memoryStore.userProfile.name
-        ? `${escapeHtml(memoryStore.userProfile.name)}، `
-        : '';
-
-      const asksPriceValue = /عيار\s*(24|21|18)|24k|21k|18k|جنيه ذهب|الجنيه|سعر الذهب|اسعار الذهب|الذهب بكام|الدهب بكام|بكام/.test(clean);
-      if (asksPriceValue) {
-        lastReasoningMeta = { type: 'price' };
-        if (/عيار 21|21k/.test(clean)) {
-          return pickVariant([
-            `${namePrefix}عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} | بيع ${formatEGP(currentGoldData.k21.sell)}`,
-            `${namePrefix}سعر عيار 21 دلوقتي شراء ${formatEGP(currentGoldData.k21.buy)} والبيع ${formatEGP(currentGoldData.k21.sell)}.`
-          ], 'price_21');
-        }
-        if (/عيار 24|24k/.test(clean)) {
-          return pickVariant([
-            `${namePrefix}عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} | بيع ${formatEGP(currentGoldData.k24.sell)}`,
-            `${namePrefix}عيار 24 حالياً شراء ${formatEGP(currentGoldData.k24.buy)} والبيع ${formatEGP(currentGoldData.k24.sell)}.`
-          ], 'price_24');
-        }
-        if (/عيار 18|18k/.test(clean)) {
-          return pickVariant([
-            `${namePrefix}عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} | بيع ${formatEGP(currentGoldData.k18.sell)}`,
-            `${namePrefix}سعر عيار 18 دلوقتي شراء ${formatEGP(currentGoldData.k18.buy)} والبيع ${formatEGP(currentGoldData.k18.sell)}.`
-          ], 'price_18');
-        }
-        if (/جنيه ذهب|الجنيه/.test(clean)) {
-          return pickVariant([
-            `${namePrefix}الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} | بيع ${formatEGP(currentGoldData.pound.sell)}`,
-            `${namePrefix}سعر الجنيه الذهب حالياً شراء ${formatEGP(currentGoldData.pound.buy)} والبيع ${formatEGP(currentGoldData.pound.sell)}.`
-          ], 'price_pound');
-        }
-        return pickVariant([
-          `${namePrefix}عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} / بيع ${formatEGP(currentGoldData.k24.sell)}<br>` +
-          `${namePrefix}عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}<br>` +
-          `${namePrefix}عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} / بيع ${formatEGP(currentGoldData.k18.sell)}<br>` +
-          `${namePrefix}الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}`,
-          `${namePrefix}الأسعار الحالية: 24K شراء ${formatEGP(currentGoldData.k24.buy)} بيع ${formatEGP(currentGoldData.k24.sell)}، 21K شراء ${formatEGP(currentGoldData.k21.buy)} بيع ${formatEGP(currentGoldData.k21.sell)}، 18K شراء ${formatEGP(currentGoldData.k18.buy)} بيع ${formatEGP(currentGoldData.k18.sell)}، والجنيه الذهب شراء ${formatEGP(currentGoldData.pound.buy)} بيع ${formatEGP(currentGoldData.pound.sell)}.`
-        ], 'price_all');
+      if (/عيار\s*18|18k/.test(clean)) {
+        return `عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} | بيع ${formatEGP(currentGoldData.k18.sell)}`;
       }
-
-      if (/تضخم/.test(clean)) {
-        lastReasoningMeta = { type: 'general' };
-        return pickVariant([
-          `${namePrefix}التضخم يعني زيادة الأسعار وتراجع قيمة العملة مع الوقت، وده بيخلي ناس كتير تعتبر الذهب وسيلة لحفظ القيمة على المدى الطويل.`,
-          `${namePrefix}لما التضخم بيزيد والعملة بتفقد جزء من قوتها الشرائية، الذهب بيُستخدم غالباً لحفظ القيمة أكتر من كونه دخل ثابت.`
-        ], 'inflation');
+      if (/جنيه|الجنيه/.test(clean)) {
+        return `الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} | بيع ${formatEGP(currentGoldData.pound.sell)}`;
       }
-
-      if (/فايده|فائده|مركزي/.test(clean)) {
-        lastReasoningMeta = { type: 'general' };
-        return pickVariant([
-          `${namePrefix}رفع الفائدة غالباً بيزود جاذبية الادخار البنكي ويضغط على الذهب أحياناً، والعكس لما الفائدة بتنخفض.`,
-          `${namePrefix}الفائدة بتأثر على حركة السيولة والادخار؛ لما بترتفع بيقل أحياناً الإقبال اللحظي على الذهب مقارنة بالودائع.`
-        ], 'interest');
+      if (/ذهب|دهب|سعر|اسعار|بكام/.test(clean)) {
+        return (
+          `عيار 24: شراء ${formatEGP(currentGoldData.k24.buy)} / بيع ${formatEGP(currentGoldData.k24.sell)}\n` +
+          `عيار 21: شراء ${formatEGP(currentGoldData.k21.buy)} / بيع ${formatEGP(currentGoldData.k21.sell)}\n` +
+          `عيار 18: شراء ${formatEGP(currentGoldData.k18.buy)} / بيع ${formatEGP(currentGoldData.k18.sell)}\n` +
+          `الجنيه الذهب: شراء ${formatEGP(currentGoldData.pound.buy)} / بيع ${formatEGP(currentGoldData.pound.sell)}`
+        );
       }
-
-      if (/مصنعيه|سبايك|سبيكه/.test(clean)) {
-        lastReasoningMeta = { type: 'general' };
-        return pickVariant([
-          `${namePrefix}السبائك والجنيهات مصنعيتها أقل من المشغولات الذهبية، وبيتم استرداد جزء من مصنعية السبائك أحياناً حسب الشروط.`,
-          `${namePrefix}المشغولات بيكون فيها مصنعية أعلى مقابل الصياغة، بينما السبائك والجنيهات مصنعيتها أقل.`
-        ], 'workmanship');
-      }
-
-      lastReasoningMeta = { type: 'general' };
-      const topic = keywords.length > 0 ? keywords.join('، ') : clean;
-      if (topic) {
-        return pickVariant([
-          `${namePrefix}في موضوع (${escapeHtml(topic)})، القرار أو الرأي الصح بيعتمد على وضعك وهدفك الحالي؛ تحب نركز على إيه بالظبط؟`,
-          `${namePrefix}بخصوص (${escapeHtml(topic)})، قولي النقطة اللي تهمك أو الفكرة اللي شايفها عشان نكمل فيها.`
-        ], `kw_${topic}`);
-      }
-
-      return pickVariant([
-        `${namePrefix}قولي تحب نتكلم في إيه دلوقتي؟`,
-        `${namePrefix}أنا معاك، اسأل أو قولي اللي في بالك.`
-      ], `gen_${clean}`);
-    }
-
-    function generateSmartReply(rawText) {
-      const trimmed = rawText.trim();
-      const correctedText = applyTypoCorrection(trimmed);
-      const clean = normalizeArabic(correctedText);
-
-      const nameReply = handleUserNameCommands(trimmed) || handleUserNameCommands(correctedText);
-      if (nameReply) {
-        lastReasoningMeta = { type: 'learned' };
-        return nameReply;
-      }
-
-      const metaReply = handleSurpriseOrIntelligenceComment(correctedText);
-      if (metaReply) {
-        return metaReply;
-      }
-
-      const lastUserMsg = [...conversationHistory].reverse().find((m) => m.role === 'user');
-      if (isCorrectionOrClarification(correctedText) && lastUserMsg && lastUserMsg.text !== trimmed) {
-        const cleanedClarification = trimmed.replace(/^(لا|مش كده|غلط|صحح|المقصود|قصدي|معناه|بمعنى|يعني)\s*/i, '').trim() || trimmed;
-        learnAssociation(lastUserMsg.text, cleanedClarification, 2);
-        lastReasoningMeta = { type: 'learned' };
-        return 'تمام، هعتمد التوضيح ده بعد كده.';
-      }
-
-      const learnedMatch = findBestLearnedMatch(correctedText) || findBestLearnedMatch(trimmed);
-      if (learnedMatch) {
-        lastReasoningMeta = { type: 'learned' };
-        return escapeHtml(learnedMatch.answer);
-      }
-
-      const wordsInClean = clean.split(' ').filter(Boolean);
-      const isGreeting = /^(اهلا|مرحبا|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|hi|hello|hey|ازيك|ازيكم|عامل ايه|اخبارك|منور|منورين)$/.test(clean)
-        || (wordsInClean.length === 1 && GREETING_WORDS.has(wordsInClean[0]));
-
-      if (isGreeting) {
-        lastReasoningMeta = { type: 'general' };
-        const greetingName = memoryStore.userProfile && memoryStore.userProfile.name
-          ? ` يا ${escapeHtml(memoryStore.userProfile.name)}`
-          : '';
-        return pickVariant([
-          `أهلاً بيك${greetingName}. إزاي أقدر أساعدك؟`,
-          `أهلاً${greetingName}، منور. تحب تسأل عن إيه؟`
-        ], 'greeting');
-      }
-
-      return synthesizeDirectAnswer(correctedText);
+      return 'لتفعيل الإجابات المفتوحة على أي سؤال، ضع مفتاح GEMINI_API_KEY في الكود وتأكد من وجود إنترنت.';
     }
 
     function appendBotBubble(htmlContent) {
@@ -786,9 +516,11 @@
       div.innerHTML = htmlContent;
       stream.appendChild(div);
       window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      return div;
     }
 
-    function sendMessage() {
+    async function sendMessage() {
+      if (isSending) return;
       const input = document.getElementById('user-input');
       const text = input.value.trim();
       if (!text) return;
@@ -802,8 +534,35 @@
 
       conversationHistory.push({ role: 'user', text });
 
-      const reply = generateSmartReply(text);
-      appendBotBubble(reply);
+      const nameReply = handleUserNameCommands(text);
+      if (nameReply) {
+        conversationHistory.push({ role: 'model', text: nameReply.replace(/<[^>]+>/g, '') });
+        appendBotBubble(nameReply);
+        return;
+      }
+
+      if (!GEMINI_API_KEY) {
+        const localAns = fallbackLocalReply(text);
+        conversationHistory.push({ role: 'model', text: localAns });
+        appendBotBubble(escapeHtml(localAns));
+        return;
+      }
+
+      isSending = true;
+      const thinkingBubble = appendBotBubble('جاري التفكير...');
+
+      try {
+        const answerHtml = await askGeminiOpen(text);
+        thinkingBubble.innerHTML = answerHtml;
+        conversationHistory.push({ role: 'model', text: thinkingBubble.textContent || '' });
+      } catch (err) {
+        const fallbackText = fallbackLocalReply(text);
+        thinkingBubble.textContent = fallbackText;
+        conversationHistory.push({ role: 'model', text: fallbackText });
+      } finally {
+        isSending = false;
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }
     }
 
     applySavedWelcomeName();

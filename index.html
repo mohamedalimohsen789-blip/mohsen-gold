@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#000000" />
   <title>سوق الذهبي & Mohsen AI</title>
@@ -16,6 +16,7 @@
       overflow-x: hidden;
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
+      touch-action: pan-y;
     }
     .top-bar {
       display: flex;
@@ -90,10 +91,11 @@
       gap: 8px;
       margin-bottom: 10px;
     }
-    .asset-pills, .range-pills, .side-pills {
+    .asset-pills, .range-pills, .side-pills, .zoom-pills {
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
+      align-items: center;
     }
     .pill-btn {
       padding: 6px 10px;
@@ -109,6 +111,16 @@
       background-color: #00e676;
       color: #000;
       border-color: #00e676;
+    }
+    .zoom-badge {
+      font-size: 12px;
+      font-family: monospace;
+      color: #00e676;
+      background-color: #102a21;
+      border: 1px solid #1f5c46;
+      padding: 4px 8px;
+      border-radius: 7px;
+      font-weight: bold;
     }
     .ohlc-bar {
       background-color: #111111;
@@ -138,7 +150,7 @@
     }
     .y-axis {
       position: relative;
-      width: 78px;
+      width: 84px;
       height: 310px;
       display: flex;
       flex-direction: column;
@@ -148,7 +160,7 @@
       color: #bdbdbd;
       text-align: left;
       direction: ltr;
-      padding: 6px 2px;
+      padding: 6px 3px;
       background-color: #121212;
       border: 1px solid #242424;
       border-radius: 8px;
@@ -158,6 +170,10 @@
       display: block;
       border-bottom: 1px dashed #222;
       padding-bottom: 1px;
+    }
+    .y-axis span.y-tick.zoom-focus {
+      color: #ffd54f;
+      font-weight: bold;
     }
     .y-axis span.y-tick:last-child {
       border-bottom: none;
@@ -191,6 +207,7 @@
       border-radius: 10px;
       overflow: hidden;
       position: relative;
+      touch-action: none;
     }
     canvas#gold-map-canvas {
       display: block;
@@ -322,7 +339,7 @@
       </div>
     </div>
 
-    <!-- صفحة خريطة الذهب (الشموع اليابانية) -->
+    <!-- صفحة خريطة الذهب (الشموع اليابانية + زووم داخل نطاق الشموع فقط) -->
     <div id="page-map" class="page">
       <div class="chart-box">
         <div class="chart-header">
@@ -348,7 +365,17 @@
             <button id="tf-4h" class="pill-btn" onclick="setMapTimeframe('4h')">4س</button>
             <button id="tf-1d" class="pill-btn" onclick="setMapTimeframe('1d')">يوم</button>
           </div>
+          <div class="zoom-pills">
+            <button class="pill-btn" onclick="zoomStep(1.3)">+ زووم</button>
+            <button class="pill-btn" onclick="zoomStep(0.77)">- تصغير</button>
+            <button class="pill-btn" onclick="resetZoom()">100%</button>
+            <span id="zoom-level-badge" class="zoom-badge">100%</span>
+          </div>
+        </div>
+
+        <div class="chart-header">
           <div id="map-tf-badge" style="font-size:12px; color:#ffd54f; font-weight:bold;">كل شمعة = 1 دقيقة</div>
+          <div style="font-size:11px; color:#9e9e9e;">الزووم يعمل داخل مربع الشموع فقط (بصباعين أو عجلة الماوس)</div>
         </div>
 
         <div class="ohlc-bar">
@@ -369,7 +396,7 @@
           <div id="map-y-axis" class="y-axis">
             <span class="y-tick">---</span>
           </div>
-          <div class="canvas-wrap">
+          <div id="candles-zone" class="canvas-wrap">
             <canvas id="gold-map-canvas"></canvas>
           </div>
         </div>
@@ -412,9 +439,9 @@
     const GEMINI_MODEL = 'gemini-2.5-flash';
 
     const CUSTOM_API_URL = '';
-    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v14';
-    const MOVE_STORAGE_KEY = 'gold_last_move_v14';
-    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v14';
+    const PRICE_STORAGE_KEY = 'gold_last_snapshot_v16';
+    const MOVE_STORAGE_KEY = 'gold_last_move_v16';
+    const MEMORY_STORAGE_KEY = 'mohsen_ai_memory_v16';
 
     const ASSET_LABELS = {
       k21: 'عيار 21',
@@ -446,7 +473,7 @@
       'مصنعيه', 'اوقيه', 'اونصه', 'اهلا', 'مرحبا', 'سلام', 'ازيك', 'اخبارك', 'منور',
       'اسمي', 'انسى', 'امسح', 'هتزيد', 'تزيد', 'هتنزل', 'تنزل', 'تقل', 'يقل', 'اخر',
       'مره', 'مرا', 'رايك', 'رأيك', 'غالي', 'رخيص', 'حلوه', 'مناسب', 'ارتفع', 'نزل',
-      'خريطه', 'خريطة', 'شارت', 'شموع', 'شمعه'
+      'خريطه', 'خريطة', 'شارت', 'شموع', 'شمعه', 'زووم', 'زوم'
     ];
 
     const GREETING_WORDS = new Set([
@@ -461,19 +488,28 @@
     let isSending = false;
     let memoryStore = loadMemoryStore();
 
-    // حالة خريطة الشموع اليابانية
+    // حالة خريطة الشموع اليابانية والزووم المحصور داخل نطاق الشموع فقط
+    const BASE_VISIBLE_CANDLES = 34;
+    const MIN_VISIBLE_CANDLES = 8;
+    const MAX_VISIBLE_CANDLES = 90;
+
     let mapAsset = 'k21';
     let mapSide = 'buy';
     let mapTimeframe = '1m';
     let candles = [];
     let baseAnchorTimeMs = Date.now();
     let viewRightIndex = 0;
-    let visibleCandleCount = 34;
+    let zoomScale = 1.0;
+    let visibleCandleCount = BASE_VISIBLE_CANDLES;
     let selectedCandleIndex = 0;
+
+    let activePointers = new Map();
     let isPanningCandles = false;
     let panStartX = 0;
     let panStartRightIndex = 0;
     let panMoved = false;
+    let pinchStartDist = 0;
+    let pinchStartZoom = 1.0;
 
     function cloneGoldData(data) {
       return {
@@ -650,9 +686,11 @@
     }
 
     function formatShortPrice(num) {
+      const absVal = Math.abs(Number(num));
+      const decimals = absVal >= 10000 ? (zoomScale >= 2.2 ? 1 : 0) : (zoomScale >= 1.4 ? 2 : 1);
       return Number(num).toLocaleString('en-US', {
-        minimumFractionDigits: num >= 10000 ? 0 : 2,
-        maximumFractionDigits: num >= 10000 ? 0 : 2
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
       });
     }
 
@@ -663,6 +701,33 @@
       if (newVal > oldVal) el.classList.add('up');
       else if (newVal < oldVal) el.classList.add('down');
       else if (defaultClass) el.classList.add(defaultClass);
+    }
+
+    function applyZoomFactor(nextZoom) {
+      const minScale = BASE_VISIBLE_CANDLES / MAX_VISIBLE_CANDLES;
+      const maxScale = BASE_VISIBLE_CANDLES / MIN_VISIBLE_CANDLES;
+      zoomScale = Math.max(minScale, Math.min(maxScale, Number(nextZoom.toFixed(2))));
+      visibleCandleCount = Math.max(
+        MIN_VISIBLE_CANDLES,
+        Math.min(MAX_VISIBLE_CANDLES, Math.round(BASE_VISIBLE_CANDLES / zoomScale))
+      );
+
+      if (viewRightIndex < visibleCandleCount - 1 && candles.length > 0) {
+        prependHistoricalCandles(visibleCandleCount - viewRightIndex + 25);
+      }
+
+      const badge = document.getElementById('zoom-level-badge');
+      if (badge) badge.textContent = `${Math.round(zoomScale * 100)}%`;
+
+      renderCandlesChart();
+    }
+
+    function zoomStep(factor) {
+      applyZoomFactor(zoomScale * factor);
+    }
+
+    function resetZoom() {
+      applyZoomFactor(1.0);
     }
 
     function generateOlderCandle(stepBack, nextClosePrice) {
@@ -733,6 +798,9 @@
       const badge = document.getElementById('map-tf-badge');
       if (badge) badge.textContent = TIMEFRAME_CONFIG[mapTimeframe].desc;
 
+      const zoomBadge = document.getElementById('zoom-level-badge');
+      if (zoomBadge) zoomBadge.textContent = `${Math.round(zoomScale * 100)}%`;
+
       renderCandlesChart();
     }
 
@@ -800,8 +868,9 @@
         if (c.high > rawMax) rawMax = c.high;
       }
       const rawSpan = Math.max(0.5, rawMax - rawMin);
-      const minPrice = rawMin - rawSpan * 0.08;
-      const maxPrice = rawMax + rawSpan * 0.08;
+      const paddingFactor = zoomScale >= 1.6 ? 0.06 : 0.08;
+      const minPrice = rawMin - rawSpan * paddingFactor;
+      const maxPrice = rawMax + rawSpan * paddingFactor;
       const totalSpan = Math.max(0.5, maxPrice - minPrice);
 
       const selCandle = candles[selectedCandleIndex] || candles[endIdx];
@@ -810,20 +879,20 @@
 
       const padLeft = 10;
       const padRight = 10;
-      const padTop = 14;
+      const padTop = 16;
       const padBottom = 26;
       const height = 310;
       const plotH = Math.max(20, height - padTop - padBottom);
       const priceToY = (p) => padTop + plotH - ((p - minPrice) / totalSpan) * plotH;
 
-      // تحديث الأرقام الكثيرة على الجنب + إظهار رقم سعر الشمعة المحددة المظبوط في مكانه على الجنب
       const yAxisEl = document.getElementById('map-y-axis');
       if (yAxisEl) {
-        const ticksCount = 9;
+        const ticksCount = zoomScale >= 2.2 ? 13 : (zoomScale >= 1.4 ? 11 : 9);
         const spans = [];
         for (let t = 0; t < ticksCount; t++) {
           const val = maxPrice - (t / (ticksCount - 1)) * totalSpan;
-          spans.push(`<span class="y-tick">${formatShortPrice(val)}</span>`);
+          const focusCls = zoomScale >= 1.5 && t % 2 === 0 ? ' y-tick zoom-focus' : ' y-tick';
+          spans.push(`<span class="${focusCls}">${formatShortPrice(val)}</span>`);
         }
         const tagY = priceToY(selCandle.close);
         const tagClass = isBull ? 'selected-price-tag' : 'selected-price-tag down-tag';
@@ -849,7 +918,7 @@
 
       const countEl = document.getElementById('candle-count-label');
       if (countEl) {
-        countEl.textContent = `شموع محمّلة: ${candles.length} شمعة | اسحب للماضي بلا حدود`;
+        countEl.textContent = `ظاهر: ${slice.length} شمعة (محمّلة: ${candles.length}) | زووم: ${Math.round(zoomScale * 100)}%`;
       }
 
       const canvas = document.getElementById('gold-map-canvas');
@@ -866,11 +935,12 @@
       ctx.clearRect(0, 0, width, height);
 
       const plotW = Math.max(20, width - padLeft - padRight);
+      const gridRows = zoomScale >= 2.2 ? 12 : (zoomScale >= 1.4 ? 10 : 8);
 
       ctx.strokeStyle = '#1d1d1d';
       ctx.lineWidth = 1;
-      for (let g = 0; g < 9; g++) {
-        const gy = padTop + (g / 8) * plotH;
+      for (let g = 0; g <= gridRows; g++) {
+        const gy = padTop + (g / gridRows) * plotH;
         ctx.beginPath();
         ctx.moveTo(padLeft, gy);
         ctx.lineTo(padLeft + plotW, gy);
@@ -878,7 +948,9 @@
       }
 
       const stepW = plotW / slice.length;
-      const bodyW = Math.max(4, Math.min(18, stepW * 0.64));
+      const bodyW = Math.max(4, Math.min(36, stepW * (zoomScale >= 1.5 ? 0.70 : 0.62)));
+      const wickWidth = zoomScale >= 2.0 ? 2.4 : (zoomScale >= 1.3 ? 1.8 : 1.4);
+      const labelEvery = zoomScale >= 2.2 ? 2 : (zoomScale >= 1.5 ? 4 : (zoomScale >= 1.1 ? 6 : 8));
 
       slice.forEach((c, i) => {
         const globalIdx = startIdx + i;
@@ -892,12 +964,12 @@
         const yClose = priceToY(c.close);
 
         if (globalIdx === selectedCandleIndex) {
-          ctx.fillStyle = 'rgba(255, 213, 79, 0.10)';
+          ctx.fillStyle = 'rgba(255, 213, 79, 0.12)';
           ctx.fillRect(centerX - stepW / 2, padTop, stepW, plotH);
         }
 
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.4;
+        ctx.lineWidth = wickWidth;
         ctx.beginPath();
         ctx.moveTo(centerX, yHigh);
         ctx.lineTo(centerX, yLow);
@@ -908,12 +980,25 @@
         ctx.fillStyle = color;
         ctx.fillRect(centerX - bodyW / 2, topY, bodyW, bodyH);
 
-        if (i % 7 === 0 || i === slice.length - 1) {
+        if (zoomScale >= 1.6) {
+          ctx.strokeStyle = bull ? '#69f0ae' : '#ff8a80';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(centerX - bodyW / 2, topY, bodyW, bodyH);
+        }
+
+        if (globalIdx === selectedCandleIndex || (zoomScale >= 2.0 && i % 2 === 0)) {
+          ctx.fillStyle = globalIdx === selectedCandleIndex ? '#ffd54f' : '#e0e0e0';
+          ctx.font = zoomScale >= 2.0 ? 'bold 11px monospace' : 'bold 10px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(formatShortPrice(c.close), centerX, Math.max(padTop + 11, yHigh - 6));
+        }
+
+        if (i % labelEvery === 0 || i === slice.length - 1) {
           const d = new Date(c.timeMs);
           const shortTime = mapTimeframe === '1d'
             ? d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' })
             : d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-          ctx.fillStyle = '#888888';
+          ctx.fillStyle = '#999999';
           ctx.font = '10px monospace';
           ctx.textAlign = 'center';
           ctx.fillText(shortTime, centerX, height - 8);
@@ -949,19 +1034,82 @@
       renderCandlesChart();
     }
 
+    function getPinchDistance() {
+      const pts = Array.from(activePointers.values());
+      if (pts.length < 2) return 0;
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      return Math.hypot(dx, dy);
+    }
+
+    function bindStrictZoomIsolation() {
+      const zone = document.getElementById('candles-zone');
+      const isInsideCandlesZone = (target) => zone && (target === zone || zone.contains(target));
+
+      // منع زووم المتصفح العام في أي مكان خارج نطاق الشموع فقط
+      document.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches.length > 1 && !isInsideCandlesZone(e.target)) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      document.addEventListener('gesturestart', (e) => {
+        if (!isInsideCandlesZone(e.target)) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      document.addEventListener('gesturechange', (e) => {
+        if (!isInsideCandlesZone(e.target)) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      document.addEventListener('wheel', (e) => {
+        if (e.ctrlKey && !isInsideCandlesZone(e.target)) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+    }
+
     function bindMapInteractions() {
       const canvas = document.getElementById('gold-map-canvas');
       if (!canvas) return;
 
+      bindStrictZoomIsolation();
+
       canvas.addEventListener('pointerdown', (e) => {
-        isPanningCandles = true;
-        panMoved = false;
-        panStartX = e.clientX;
-        panStartRightIndex = viewRightIndex;
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
         canvas.setPointerCapture(e.pointerId);
+
+        if (activePointers.size === 2) {
+          isPanningCandles = false;
+          pinchStartDist = Math.max(10, getPinchDistance());
+          pinchStartZoom = zoomScale;
+          return;
+        }
+
+        if (activePointers.size === 1) {
+          isPanningCandles = true;
+          panMoved = false;
+          panStartX = e.clientX;
+          panStartRightIndex = viewRightIndex;
+        }
       });
 
       canvas.addEventListener('pointermove', (e) => {
+        if (!activePointers.has(e.pointerId)) return;
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (activePointers.size === 2) {
+          const dist = getPinchDistance();
+          if (pinchStartDist > 0 && dist > 0) {
+            panMoved = true;
+            applyZoomFactor(pinchStartZoom * (dist / pinchStartDist));
+          }
+          return;
+        }
+
         if (!isPanningCandles) return;
         const dx = e.clientX - panStartX;
         if (Math.abs(dx) > 4) panMoved = true;
@@ -979,12 +1127,33 @@
       });
 
       canvas.addEventListener('pointerup', (e) => {
-        if (!panMoved) {
+        const wasSingleTap = activePointers.size === 1 && !panMoved && isPanningCandles;
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) {
+          pinchStartDist = 0;
+        }
+        if (activePointers.size === 0) {
+          isPanningCandles = false;
+        }
+        if (wasSingleTap) {
           selectCandleAtClientX(e.clientX);
         }
-        isPanningCandles = false;
         try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
       });
+
+      canvas.addEventListener('pointercancel', (e) => {
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) pinchStartDist = 0;
+        if (activePointers.size === 0) isPanningCandles = false;
+      });
+
+      // عجلة الماوس تعمل زووم داخل نطاق الشموع فقط
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const factor = e.deltaY < 0 ? 1.15 : 0.87;
+        applyZoomFactor(zoomScale * factor);
+      }, { passive: false });
 
       window.addEventListener('resize', () => {
         if (document.getElementById('page-map').classList.contains('active')) {
